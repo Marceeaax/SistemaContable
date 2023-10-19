@@ -1,11 +1,17 @@
-{% extends "base.html" %}
 {% load static %}
 
-{% block title %}
-Sistema Contable
-{% endblock %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Contable</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
 
-{% block content %}
 <!-- Navbar -->
 <nav class="navbar navbar-expand-lg navbar-light bg-light">
   <a class="navbar-brand" href="#">AG Asociados</a>
@@ -15,10 +21,13 @@ Sistema Contable
   <div class="collapse navbar-collapse" id="navbarNav">
     <ul class="navbar-nav ml-auto">
       <li class="nav-item">
-        <a class="nav-link" href="{% url 'users:login' %}">Iniciar Sesión</a>
+        <span class="nav-link">Bienvenido, {{ request.user.username }}</span>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="{% url 'users:register' %}">Registrarse</a>
+        <a class="nav-link" href="#">Perfil</a> <!-- Puedes agregar una URL para ver/editar el perfil del usuario -->
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'users:logout' %}">Cerrar Sesión</a>
       </li>
     </ul>
   </div>
@@ -26,7 +35,7 @@ Sistema Contable
 
 <!-- Header -->
 <header class="bg-primary text-white text-center py-5">
-    <h1>Bienvenido al Sistema Contable</h1>
+    <h1>Bienvenido, {{ request.user.username }}</h1>
     <p>Gestiona la contabilidad de tus clientes de forma eficiente y sencilla.</p>
 </header>
 
@@ -53,4 +62,9 @@ Sistema Contable
     <p>&copy; 2023 Sistema Contable. Todos los derechos reservados.</p>
 </footer>
 
-{% endblock %}
+<!-- Bootstrap JS, Popper.js, and jQuery -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
