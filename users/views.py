@@ -19,7 +19,7 @@ def register_view(request):
             user.save()  # Guarda el usuario
             login(request, user)
             messages.success(request, 'Te has registrado correctamente.')
-            return redirect('home')  # Redirecciona a la vista principal (debes definirla)
+            return redirect('homepage')  # Redirecciona a la vista principal (debes definirla)
     else:
         form = CustomUserCreationForm()
     return render(request, 'users/register.html', {'form': form})
