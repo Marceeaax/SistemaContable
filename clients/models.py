@@ -1,37 +1,24 @@
 from django.db import models
 
-class Cliente(models.Model):
-    # Definición de tipos de cliente
-    PERSONA_FISICA = 'FISICA'
-    PERSONA_JURIDICA = 'JURIDICA'
-    TIPOS_DE_CLIENTE = [
-        (PERSONA_FISICA, 'Persona Física'),
-        (PERSONA_JURIDICA, 'Persona Jurídica'),
-    ]
-
-    # Campos comunes
-    tipo_cliente = models.CharField(
-        max_length=10,
-        choices=TIPOS_DE_CLIENTE,
-        default=PERSONA_FISICA,
-    )
-    nombre = models.CharField(max_length=200)
+class PersonaFisica(models.Model):
+    nombre = models.CharField(max_length=100)
+    apellido = models.CharField(max_length=100)
+    dni = models.CharField(max_length=8, unique=True)  # Suponiendo DNI de 8 dígitos
+    fecha_nacimiento = models.DateField()
     direccion = models.TextField()
-    telefono = models.CharField(max_length=15)
-    correo = models.EmailField()
-
-    # Campos específicos para Persona Física
-    primer_nombre = models.CharField(max_length=100, blank=True, null=True)
-    apellido = models.CharField(max_length=100, blank=True, null=True)
-    cedula = models.CharField(max_length=15, blank=True, null=True)
-
-    # Campos específicos para Persona Jurídica
-    razon_social = models.CharField(max_length=200, blank=True, null=True)
-    ruc = models.CharField(max_length=15, blank=True, null=True)
+    telefono = models.CharField(max_length=15, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
 
     def __str__(self):
-        return self.nombre
+        return f"{self.nombre} {self.apellido}"
 
-    def save(self, *args, **kwargs):
-        # Aquí puedes agregar lógica para asegurarte de que los campos se rellenen adecuadamente según el tipo de cliente
-        super().save(*args, **kwargs)
+class PersonaJuridica(models.Model):
+    razon_social = models.CharField(max_length=150)
+    ruc = models.CharField(max_length=11, unique=True)  # Suponiendo RUC de 11 dígitos
+    direccion_fiscal = models.TextField()
+    telefono = models.CharField(max_length=15, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    representante_legal = models.ForeignKey(PersonaFisica, on_delete=models.SET_NULL, blank=True, null=True)
+
+    def __str__(self):
+        return self.razon_social

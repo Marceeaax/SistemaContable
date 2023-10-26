@@ -1,8 +1,53 @@
 from django.db import models
-from accounts.models import Account
+from clients.models import PersonaFisica, PersonaJuridica
 
-class Transaction(models.Model):
-    account = models.ForeignKey(Account, on_delete=models.CASCADE)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField()
-    # ... otros campos necesarios
+class Autofactura(models.Model):
+    cliente_persona_fisica = models.ForeignKey(
+        PersonaFisica, 
+        on_delete=models.CASCADE, 
+        related_name="autofacturas", 
+        null=True, 
+        blank=True
+    )
+    cliente_persona_juridica = models.ForeignKey(
+        PersonaJuridica, 
+        on_delete=models.CASCADE, 
+        related_name="autofacturas", 
+        null=True, 
+        blank=True
+    )
+    # Otros campos...
+
+class BoletaDeVenta(models.Model):
+    cliente_persona_fisica = models.ForeignKey(
+        PersonaFisica, 
+        on_delete=models.CASCADE, 
+        related_name="boletas_de_venta", 
+        null=True, 
+        blank=True
+    )
+    cliente_persona_juridica = models.ForeignKey(
+        PersonaJuridica, 
+        on_delete=models.CASCADE, 
+        related_name="boletas_de_venta", 
+        null=True, 
+        blank=True
+    )
+    # Otros campos...
+
+class Factura(models.Model):
+    cliente_persona_fisica = models.ForeignKey(
+        PersonaFisica, 
+        on_delete=models.CASCADE, 
+        related_name="facturas", 
+        null=True, 
+        blank=True
+    )
+    cliente_persona_juridica = models.ForeignKey(
+        PersonaJuridica, 
+        on_delete=models.CASCADE, 
+        related_name="facturas", 
+        null=True, 
+        blank=True
+    )
+    # Otros campos...
