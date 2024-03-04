@@ -19,9 +19,10 @@
             <table class="table table-striped custom-table">
                 <thead>
                     <tr>
-                        <th scope="col">Nombre / Razón Social</th>
-                        <th scope="col">Apellido / Representante Legal</th>
-                        <th scope="col">Cedula / RUC</th>
+                        <th scope="col">Nombres</th>
+                        <th scope="col">Apellidos</th>
+                        <th scope="col">RUC</th>
+                        <th scope="col">Vencimiento</th>
                         <th scope="col">Contacto</th>
                         <th scope="col">Email</th>
                         <th scope="col">Tipo</th>
@@ -33,6 +34,7 @@
                         <td>{{ persona.nombre }}</td>
                         <td>{{ persona.apellido }}</td>
                         <td>{{ persona.cedula }}</td>
+                        <td>5</td>
                         <td>{{ persona.telefono }}</td>
                         <td>{{ persona.email }}</td>
                         <td>Persona Física</td>
@@ -97,14 +99,6 @@
   </div>
 </div>
 
-{% if show_modal %}
-<script>
-    $(document).ready(function() {
-        $('#modalCrearCliente').modal('show');
-    });
-</script>
-{% endif %}
-
 <!-- Script para alternar entre formularios -->
 <script>
 
@@ -129,12 +123,18 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-    var errorsExist = document.querySelector('.errorlist') !== null;
-    if (errorsExist) {
-        $('#modalCrearCliente').modal('show'); // Muestra el modal si hay errores
-    }
+
 
 </script>
+
+
+{% if show_modal %}
+<script>
+    $(document).ready(function() {
+        $('#modalCrearCliente').modal('show');
+    });
+</script>
+{% endif %}
 
 <style>
   .form input, .form textarea {
