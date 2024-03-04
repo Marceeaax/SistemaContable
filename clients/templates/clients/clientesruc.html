@@ -5,7 +5,16 @@
 {% block content %}
 <div class="content">
     <div class="container">
-        <h2 class="mb-5">Clientes RUC</h2>
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h2 class="mb-4">Clientes RUC</h2>
+            </div>
+            <div class="col-md-6 text-right">
+                <button type="button" class="btn btn-success" data-toggle="modal" data-target="#modalCrearCliente">
+                    Añadir cliente
+                  </button>
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-striped custom-table">
                 <thead>
@@ -44,4 +53,144 @@
         </div>
     </div>
 </div>
+
+<!-- Modal -->
+<div class="modal fade" id="modalCrearCliente" tabindex="-1" role="dialog" aria-labelledby="modalCrearClienteLabel" aria-hidden="true"  data-backdrop="static">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalCrearClienteLabel">Nuevo Cliente</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center">
+          <div class="btn-group" role="group" aria-label="Tipo de Cliente">
+            <button type="button" class="btn btn-persona-fisica active">Persona Física</button>
+            <button type="button" class="btn btn-persona-juridica">Persona Jurídica</button>
+          </div>
+        </div>    
+        <!-- Formulario de Persona Física -->
+        <div id="personaFisicaForm">
+          <form method="post" action="{% url 'clients:crear_cliente' %}" class="form">
+            {% csrf_token %}
+            {{ form_persona_fisica.as_p }}
+            <div class="text-right">
+              <button type="submit" name="form_type" value="fisica" class="btn btn-success btn-crear">Crear Persona Física</button>
+            </div>
+          </form>
+        </div>
+        
+        <!-- Formulario de Persona Jurídica (oculto por defecto) -->
+        <div id="personaJuridicaForm" style="display: none;">
+          <form method="post" action="{% url 'clients:crear_cliente' %}" class="form">
+            {% csrf_token %}
+            {{ form_persona_juridica.as_p }}
+            <div class="text-right">
+              <button type="submit" name="form_type" value="juridica" class="btn btn-success">Crear Persona Jurídica</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if show_modal %}
+<script>
+    $(document).ready(function() {
+        $('#modalCrearCliente').modal('show');
+    });
+</script>
+{% endif %}
+
+<!-- Script para alternar entre formularios -->
+<script>
+
+document.addEventListener('DOMContentLoaded', function() {
+    var btnFisica = document.querySelector('.btn-persona-fisica');
+    var btnJuridica = document.querySelector('.btn-persona-juridica');
+    var fisicaForm = document.getElementById('personaFisicaForm');
+    var juridicaForm = document.getElementById('personaJuridicaForm');
+
+    btnFisica.addEventListener('click', function() {
+        fisicaForm.style.display = 'block';
+        juridicaForm.style.display = 'none';
+        btnFisica.classList.add('active');
+        btnJuridica.classList.remove('active');
+    });
+
+    btnJuridica.addEventListener('click', function() {
+        juridicaForm.style.display = 'block';
+        fisicaForm.style.display = 'none';
+        btnJuridica.classList.add('active');
+        btnFisica.classList.remove('active');
+    });
+});
+
+    var errorsExist = document.querySelector('.errorlist') !== null;
+    if (errorsExist) {
+        $('#modalCrearCliente').modal('show'); // Muestra el modal si hay errores
+    }
+
+</script>
+
+<style>
+  .form input, .form textarea {
+      margin-bottom: 5px; /* Espacio debajo de cada campo */
+      border: 1px solid #ddd; /* Borde más suave */
+  }
+  
+  .form input[type="text"], .form input[type="email"], .form input[type="tel"], .form input[type="date"], .form textarea {
+      width: 100%; /* Ancho completo */
+      padding: 8px; /* Espaciado interno */
+  }
+  
+  .form textarea {
+      height: 80px; /* Altura fija para textareas */
+  }
+
+  .btn-crear {
+    background-color: #28a745; /* Verde Bootstrap por defecto */
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: .25rem;
+    transition: box-shadow 0.1s ease-in-out;
+}
+
+.btn-crear:hover {
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.5); /* Sombra suave alrededor del botón */
+    cursor: pointer;
+}
+
+.btn-group .btn {
+    color: white;
+    background-color: #6c757d; /* Gris por defecto */
+    border: none;
+    padding: 10px 20px;
+    margin-bottom: 12px;
+    margin-right: 10px;
+}
+
+/* Remueve el margen extra del último botón */
+.button-group .btn:last-child {
+  margin-right: 0;
+}
+
+.btn-group .btn.active {
+    background-color: #007bff; /* Azul cuando está activo */
+}
+
+.btn-group .btn:not(.active):hover {
+    background-color: #5a6268; /* Un gris un poco más oscuro para el hover */
+}
+
+
+  </style>
+
 {% endblock %}
+
+
