@@ -19,7 +19,14 @@ def clientes_ruc_view(request):
         'show_modal': 'form_type' in request.session,
     })
 
+def calcular_vencimiento_ruc(ruc):
+    # Extraer el último dígito antes del guión
+    ultimo_digito = int(ruc[-3])
 
+    # Calcular el vencimiento del RUC
+    vencimiento = ultimo_digito * 2 + 7
+
+    return str(vencimiento)
 
 
 def crear_cliente(request):
@@ -28,7 +35,19 @@ def crear_cliente(request):
         if form_type == 'fisica':
             form = PersonaFisicaForm(request.POST)
             if form.is_valid():
-                form.save()
+                # Obtener el RUC del formulario
+                ruc = form.cleaned_data['ruc']
+
+                print(ruc)
+                # Calcular el vencimiento del RUC
+                vencimiento_ruc = calcular_vencimiento_ruc(ruc)
+
+                # Guardar el cliente con el vencimiento del RUC calculado
+                cliente = form.save(commit=False)
+                print(cliente)
+                cliente.vencimiento = vencimiento_ruc
+                cliente.save()
+
                 return redirect('clients:clientesruc')
             else:
                 for field, errors in form.errors.items():

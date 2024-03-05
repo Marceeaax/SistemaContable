@@ -33,8 +33,8 @@
                     <tr>
                         <td>{{ persona.nombre }}</td>
                         <td>{{ persona.apellido }}</td>
-                        <td>{{ persona.cedula }}</td>
-                        <td>5</td>
+                        <td>{{ persona.ruc }}</td>
+                        <td>{{ persona.vencimiento }}</td>
                         <td>{{ persona.telefono }}</td>
                         <td>{{ persona.email }}</td>
                         <td>Persona Física</td>
@@ -122,19 +122,8 @@ document.addEventListener('DOMContentLoaded', function() {
         btnFisica.classList.remove('active');
     });
 });
-
-
-
 </script>
 
-
-{% if show_modal %}
-<script>
-    $(document).ready(function() {
-        $('#modalCrearCliente').modal('show');
-    });
-</script>
-{% endif %}
 
 <style>
   .form input, .form textarea {
