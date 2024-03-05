@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Persona(models.Model):
-    ruc = models.CharField(max_length=11)
+    ruc = models.CharField(max_length=11, unique=True)
     contrasena = models.CharField(max_length=25, default='', )
     vencimiento = models.CharField(max_length=10, default='', )
     telefono = models.CharField(max_length=15, blank=True, null=True)

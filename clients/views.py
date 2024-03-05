@@ -1,8 +1,7 @@
-from django.shortcuts import render, redirect
-from django.urls import reverse
+from django.shortcuts import render
+from django.http import JsonResponse
 from .models import PersonaFisica, PersonaJuridica
 from .forms import PersonaFisicaForm, PersonaJuridicaForm
-from django.contrib import messages
 
 def clientes_ruc_view(request):
     form_persona_fisica = PersonaFisicaForm(request.session.pop('form_data', None) if request.session.get('form_type') == 'fisica' else None)
@@ -20,54 +19,32 @@ def clientes_ruc_view(request):
     })
 
 def calcular_vencimiento_ruc(ruc):
-    # Extraer el último dígito antes del guión
     ultimo_digito = int(ruc[-3])
-
-    # Calcular el vencimiento del RUC
     vencimiento = ultimo_digito * 2 + 7
-
     return str(vencimiento)
-
 
 def crear_cliente(request):
     if request.method == 'POST':
         form_type = request.POST.get('form_type', None)
+        print(form_type)
         if form_type == 'fisica':
             form = PersonaFisicaForm(request.POST)
-            if form.is_valid():
-                # Obtener el RUC del formulario
-                ruc = form.cleaned_data['ruc']
-
-                print(ruc)
-                # Calcular el vencimiento del RUC
-                vencimiento_ruc = calcular_vencimiento_ruc(ruc)
-
-                # Guardar el cliente con el vencimiento del RUC calculado
-                cliente = form.save(commit=False)
-                print(cliente)
-                cliente.vencimiento = vencimiento_ruc
-                cliente.save()
-
-                return redirect('clients:clientesruc')
-            else:
-                for field, errors in form.errors.items():
-                    for error in errors:
-                        messages.error(request, f"{field}: {error}")
-                request.session['form_data'] = request.POST
-                request.session['form_type'] = 'fisica'
-                return redirect('clients:clientesruc')
-
         elif form_type == 'juridica':
             form = PersonaJuridicaForm(request.POST)
-            if form.is_valid():
-                form.save()
-                return redirect('clients:clientesruc')
-            else:
-                for field, errors in form.errors.items():
-                    for error in errors:
-                        messages.error(request, f"{field}: {error}")
-                request.session['form_data'] = request.POST
-                request.session['form_type'] = 'juridica'
-                return redirect('clients:clientesruc')
+        else:
+            # Devuelve un error si no se especifica el tipo de formulario
+            return JsonResponse({'success': False, 'message': 'Tipo de formulario no especificado'}, status=400)
 
-    return redirect('clients:clientesruc')
+        if form.is_valid():
+            cliente = form.save(commit=False)
+            if form_type == 'fisica':
+                ruc = form.cleaned_data['ruc']
+                vencimiento_ruc = calcular_vencimiento_ruc(ruc)
+                cliente.vencimiento = vencimiento_ruc
+            cliente.save()
+            return JsonResponse({'success': True, 'message': 'Cliente creado con éxito'})
+        else:
+            errors = form.errors.as_json()
+            return JsonResponse({'success': False, 'errors': errors}, status=400)
+    else:
+        return JsonResponse({'success': False, 'message': 'Método no permitido'}, status=405)

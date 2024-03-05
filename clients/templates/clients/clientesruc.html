@@ -3,6 +3,7 @@
 {% block title %}Clientes RUC{% endblock %}
 
 {% block content %}
+
 <div class="content">
     <div class="container">
         <div class="row align-items-center">
@@ -89,6 +90,7 @@
           <form method="post" action="{% url 'clients:crear_cliente' %}" class="form">
             {% csrf_token %}
             {{ form_persona_juridica.as_p }}
+            <input type="hidden" name="form_type" value="fisica">
             <div class="text-right">
               <button type="submit" name="form_type" value="juridica" class="btn btn-success">Crear Persona Jurídica</button>
             </div>
@@ -125,6 +127,70 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 
+<script>
+  jQuery(document).ready(function() {
+    console.log('Documento listo');
+    $('.btn-crear').on('click', function(e) {
+      e.preventDefault();
+      var form = $(this).closest('form'); // Encuentra el formulario más cercano al botón que se presionó
+      var form_type_value = $(this).attr('value'); // Obtiene el valor del botón presionado, asegúrate de que el botón tenga el valor "fisica" o "juridica" respectivamente
+
+      // Serializar los datos del formulario y agregar el form_type manualmente
+      var formData = form.serialize() + '&form_type=' + form_type_value;
+      
+      $.ajax({
+        type: 'POST',
+        url: form.attr('action'),
+        data: formData,
+        dataType: 'json', // Especificar que se espera una respuesta JSON
+        success: function(response) {
+          if (response.success) {
+            // Si se creó el cliente con éxito, redireccionar con JavaScript
+            Swal.fire({
+              title: "Éxito",
+              text: response.message,
+              icon: "success"
+            }).then(function() {
+              window.location.href = '/clientesruc/'; // Ajustar la URL según sea necesario
+            });
+          } else {
+            // Si hay errores en el formulario, mostrar los errores con SweetAlert
+            if (response.errors) {
+              var errors = response.errors;
+              var errorMessages = [];
+              for (var field in errors) {
+                if (errors.hasOwnProperty(field)) {
+                  errorMessages.push(errors[field][0].message);
+                }
+              }
+              Swal.fire({
+                title: "Error en el formulario",
+                text: "Errores: " + errorMessages.join(', '),
+                icon: "error"
+              });
+            } else {
+              Swal.fire({
+                title: "Error",
+                text: "Ocurrió un error inesperado.",
+                icon: "error"
+              });
+            }
+          }
+        },
+        error: function(xhr, status, error) {
+          Swal.fire({
+            title: "Error",
+            text: "Ocurrió un error inesperado.",
+            icon: "error"
+          });
+        }
+      });
+    });
+  });
+</script>
+
+
+  
 <style>
   .form input, .form textarea {
       margin-bottom: 5px; /* Espacio debajo de cada campo */
@@ -177,9 +243,10 @@ document.addEventListener('DOMContentLoaded', function() {
     background-color: #5a6268; /* Un gris un poco más oscuro para el hover */
 }
 
-
   </style>
 
 {% endblock %}
+
+
 
 
