@@ -48,3 +48,26 @@ def crear_cliente(request):
             return JsonResponse({'success': False, 'errors': errors}, status=400)
     else:
         return JsonResponse({'success': False, 'message': 'Método no permitido'}, status=405)
+
+def editar_cliente(request):
+    if request.method == 'POST':
+        cliente_id = request.POST.get('clientId', None)
+        form_type = request.POST.get('form_type', None)
+        
+        if form_type == 'fisica':
+            cliente = PersonaFisica.objects.get(pk=cliente_id)
+            form = PersonaFisicaForm(request.POST, instance=cliente)
+        elif form_type == 'juridica':
+            cliente = PersonaJuridica.objects.get(pk=cliente_id)
+            form = PersonaJuridicaForm(request.POST, instance=cliente)
+        else:
+            return JsonResponse({'success': False, 'message': 'Tipo de formulario no especificado'}, status=400)
+
+        if form.is_valid():
+            form.save()
+            return JsonResponse({'success': True, 'message': 'Cliente actualizado con éxito'})
+        else:
+            errors = form.errors.as_json()
+            return JsonResponse({'success': False, 'errors': errors}, status=400)
+    else:
+        return JsonResponse({'success': False, 'message': 'Método no permitido'}, status=405)

@@ -24,6 +24,7 @@
                         <th scope="col">Apellidos</th>
                         <th scope="col">RUC</th>
                         <th scope="col">Vencimiento</th>
+                        <th scope="col">Contraseña</th>
                         <th scope="col">Contacto</th>
                         <th scope="col">Email</th>
                         <th scope="col">Tipo</th>
@@ -31,16 +32,17 @@
                 </thead>
                 <tbody>
                     {% for persona in personas_fisicas %}
-                    <tr class="table-row">
+                    <tr class="table-row" data-client-id="{{ persona.id }}">
                         <td >{{ persona.nombre }}</td>
                         <td>{{ persona.apellido }}</td>
                         <td>{{ persona.ruc }}</td>
                         <td>{{ persona.vencimiento }}</td>
+                        <td>{{ persona.contrasena }}</td>
                         <td>{{ persona.telefono }}</td>
                         <td>{{ persona.email }}</td>
                         <td>Persona Física</td>
                         <td class="edit-cell">
-                          <span class="material-symbols-outlined edit-icon">edit</span>
+                          <span class="material-symbols-outlined edit-icon" data-client-id="{{ persona.id }}">edit</span>
                         </td>
                     {% endfor %}
                     {% for persona in personas_juridicas %}
@@ -129,6 +131,41 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<script>
+// Script para editar clientes 
+  document.addEventListener('DOMContentLoaded', function() { // Funcion que se ejecuta cuando el documento está listo
+    var editIcons = document.querySelectorAll('.edit-icon'); // Selecciona todos los íconos de edición (la ultima vez imprimio un NodeList de 22 items)
+    console.log(editIcons);
+
+    editIcons.forEach(function(icon) {
+        icon.addEventListener('click', function() {
+            var clientId = this.getAttribute('data-client-id');
+            var row = document.querySelector('tr[data-client-id="' + clientId + '"]');
+            var cells = row.querySelectorAll('td:not(.edit-cell)');
+
+            // Aquí asumimos el orden de las celdas como en tu thead
+            document.querySelector('#personaFisicaForm [name="nombre"]').value = cells[0].textContent; // Nombre
+            document.querySelector('#personaFisicaForm [name="apellido"]').value = cells[1].textContent; // Apellido
+            document.querySelector('#personaFisicaForm [name="ruc"]').value = cells[2].textContent; // RUC
+            document.querySelector('#personaFisicaForm [name="contrasena"]').value = cells[4].textContent; 
+            document.querySelector('#personaFisicaForm [name="telefono"]').value = cells[5].textContent; // Contacto
+            document.querySelector('#personaFisicaForm [name="email"]').value = cells[6].textContent; // Email
+
+            // Cambia el título y el botón del modal para reflejar el modo de edición
+            document.getElementById('modalCrearClienteLabel').textContent = 'Editar Cliente';
+            var submitButton = document.querySelector('#personaFisicaForm .btn-crear');
+            submitButton.textContent = 'Actualizar Persona Física';
+            submitButton.setAttribute('data-client-id', clientId); // Para usar en la lógica de envío
+
+            // Muestra el modal
+            $('#modalCrearCliente').modal('show');
+        });
+    });
+
+    // Añade lógica para el envío del formulario aquí, usando el `data-client-id` para saber si estás creando o actualizando un cliente
+});
+
+</script>
 
 <script>
   jQuery(document).ready(function() {
@@ -261,16 +298,12 @@ document.addEventListener('DOMContentLoaded', function() {
   cursor: pointer;
 }
 
-tr:hover + .edit-icon-container {
-    display: block; /* Muestra el ícono cuando se hace hover en la fila de la tabla */
-}
-
 .edit-icon {
  /* ocultar por defecto */
     position: absolute;
     background-color: white;
     right: -10px; /* ajustar según sea necesario para mover hacia la derecha */
-    top: 50%;
+    top: 20%;
     cursor: pointer;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
@@ -279,19 +312,11 @@ tr:hover + .edit-icon-container {
   position: relative;
 }
 
-.row-container:hover .edit-icon-container {
-  display: block;
-}
-
 .edit-icon-td {
   text-align: right;
   visibility: hidden;
   white-space: nowrap;
 }
-
-.table-row:hover .edit-cell {
-    display: inline; /* mostrar el ícono al pasar el mouse */
-  }
 
 
 .edit-cell {
@@ -313,7 +338,7 @@ tr:hover + .edit-icon-container {
 }
 
 .table-striped tbody tr:hover td.edit-cell .edit-icon {
-  background-color: white !important;
+  background-color: white ;
 }
   </style>
 
