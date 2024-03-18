@@ -131,58 +131,45 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script>
-// Script para editar clientes 
-  document.addEventListener('DOMContentLoaded', function() { // Funcion que se ejecuta cuando el documento está listo
-    var editIcons = document.querySelectorAll('.edit-icon'); // Selecciona todos los íconos de edición (la ultima vez imprimio un NodeList de 22 items)
-    console.log(editIcons);
-
-    editIcons.forEach(function(icon) {
-        icon.addEventListener('click', function() {
-            var clientId = this.getAttribute('data-client-id');
-            var row = document.querySelector('tr[data-client-id="' + clientId + '"]');
-            var cells = row.querySelectorAll('td:not(.edit-cell)');
-
-            // Aquí asumimos el orden de las celdas como en tu thead
-            document.querySelector('#personaFisicaForm [name="nombre"]').value = cells[0].textContent; // Nombre
-            document.querySelector('#personaFisicaForm [name="apellido"]').value = cells[1].textContent; // Apellido
-            document.querySelector('#personaFisicaForm [name="ruc"]').value = cells[2].textContent; // RUC
-            document.querySelector('#personaFisicaForm [name="contrasena"]').value = cells[4].textContent; 
-            document.querySelector('#personaFisicaForm [name="telefono"]').value = cells[5].textContent; // Contacto
-            document.querySelector('#personaFisicaForm [name="email"]').value = cells[6].textContent; // Email
-
-            // Cambia el título y el botón del modal para reflejar el modo de edición
-            document.getElementById('modalCrearClienteLabel').textContent = 'Editar Cliente';
-            var submitButton = document.querySelector('#personaFisicaForm .btn-crear');
-            submitButton.textContent = 'Actualizar Persona Física';
-            submitButton.setAttribute('data-client-id', clientId); // Para usar en la lógica de envío
-
-            // Muestra el modal
-            $('#modalCrearCliente').modal('show');
-        });
-    });
-
-    // Añade lógica para el envío del formulario aquí, usando el `data-client-id` para saber si estás creando o actualizando un cliente
-});
-
-</script>
 
 <script>
   jQuery(document).ready(function() {
+      // Inicialización de mensajes de consola y eventos de botones
       console.log('Documento listo');
+      
+      // Evento de clic para el botón de añadir nuevo cliente
+      $('.btn-success[data-toggle="modal"]').on('click', function() {
+          // Limpiar campos del formulario
+          $('#personaFisicaForm [name="nombre"]').val('');
+          $('#personaFisicaForm [name="apellido"]').val('');
+          $('#personaFisicaForm [name="ruc"]').val('');
+          $('#personaFisicaForm [name="contrasena"]').val('');
+          $('#personaFisicaForm [name="telefono"]').val('');
+          $('#personaFisicaForm [name="email"]').val('');
+          $('#personaFisicaForm [name="fecha_nacimiento"]').val('');
+          $('#personaFisicaForm [name="direccion"]').val('');
+
+          // Cambiar leyendas para creación
+          $('#modalCrearClienteLabel').text('Nuevo Cliente');
+          var submitButton = $('#personaFisicaForm .btn-crear');
+          submitButton.text('Crear Persona Física');
+          submitButton.removeData('client-id'); // Remover el ID del cliente, si lo hubiera
+      });
+      // Manejador de clics para los botones de crear cliente
       $('.btn-crear').on('click', function(e) {
-          e.preventDefault();
-          var form = $(this).closest('form');
-          var form_type_value = $(this).attr('value'); 
+          e.preventDefault(); // Prevenir la acción por defecto del formulario
+          var form = $(this).closest('form'); // Encontrar el formulario más cercano
+          var form_type_value = $(this).attr('value');  // Determinar si es persona física o jurídica
 
-          var formData = form.serialize() + '&form_type=' + form_type_value;
+          var formData = form.serialize() + '&form_type=' + form_type_value; // Serializar datos del formulario
 
+          // Llamada AJAX para crear o editar cliente
           $.ajax({
               type: 'POST',
               url: form.attr('action'),
               data: formData,
               dataType: 'json',
-              success: function(response) {
+              success: function(response) { // En caso de éxito
                   if (response.success) {
                       Swal.fire({
                           title: "Éxito",
@@ -193,39 +180,96 @@ document.addEventListener('DOMContentLoaded', function() {
                       });
                   }
               },
-              error: function(xhr, status, err) {
-                // Si el estado es 400, entonces es un error de validación.
-                if (xhr.status === 400) {
-                    var response = JSON.parse(xhr.responseText);
-                    var errors = JSON.parse(response.errors);
-                    var errorMessages = [];
-                    for (var errorField in errors) {
-                      // Comprobar si el campo de errores realmente existe en el objeto
-                      if (errors.hasOwnProperty(errorField)) {
-                          // Iterar sobre todos los mensajes de error para ese campo
-                          for (var i = 0; i < errors[errorField].length; i++) {
-                              errorMessages.push(errors[errorField][i].message);
-                          }
-                      }
-                  }
-                    Swal.fire({
-                        title: "Error en el formulario",
-                        text: errorMessages.join(', '),
-                        icon: "error"
-                    });
-                } else {
-                    // Para otros errores HTTP, mostrar un mensaje genérico.
-                    Swal.fire({
-                        title: "Error",
-                        text: "Ocurrió un error inesperado: " + xhr.statusText,
-                        icon: "error"
-                    });
-                }
+              error: function(xhr, status, err) { // Manejo de errores
+                handleError(xhr); // Función para manejar errores
             }
           });
       });
+
+      // Evento de clic para íconos de edición
+      $(document).on('click', '.edit-icon', function() {
+          var clientId = $(this).data('client-id'); // Obtener el ID del cliente
+          var row = $('tr[data-client-id="' + clientId + '"]'); // Encontrar la fila correspondiente
+          var cells = row.find('td:not(.edit-cell)'); // Obtener todas las celdas excepto la de edición
+
+          // Llenar el formulario con los datos existentes del cliente
+          $('#personaFisicaForm [name="nombre"]').val(cells.eq(0).text()); // Nombre
+          $('#personaFisicaForm [name="apellido"]').val(cells.eq(1).text()); // Apellido
+          $('#personaFisicaForm [name="ruc"]').val(cells.eq(2).text()); // RUC
+          $('#personaFisicaForm [name="contrasena"]').val(cells.eq(4).text()); // Contraseña
+          $('#personaFisicaForm [name="telefono"]').val(cells.eq(5).text()); // Teléfono
+          $('#personaFisicaForm [name="email"]').val(cells.eq(6).text()); // Email
+
+          // AJAX para obtener datos adicionales como fecha de nacimiento y dirección
+          $.ajax({
+              type: 'GET', // O 'POST' dependiendo de cómo esté configurado tu backend
+              url: `/clients/datos-faltantes/${clientId}/`, // La URL para obtener los datos
+              dataType: 'json',
+              success: function(response) {
+                  // Asumiendo que 'response' es un objeto que contiene 'fechaNacimiento' y 'direccion'
+                  $('#personaFisicaForm [name="fecha_nacimiento"]').val(response.fecha_nacimiento);
+                  $('#personaFisicaForm [name="direccion"]').val(response.direccion);
+              },
+              error: function(xhr, status, error) {
+                  console.error("Error al obtener información adicional del cliente:", error);
+                  // Manejar el error según sea necesario
+              }
+          });
+
+          // Cambiar título y texto del botón del modal para edición
+          $('#modalCrearClienteLabel').text('Editar Cliente');
+          var submitButton = $('#personaFisicaForm .btn-crear');
+          submitButton.text('Actualizar Persona Física');
+          submitButton.data('client-id', clientId); // Guardar ID del cliente para su uso posterior
+
+          // Mostrar el modal para edición
+          $('#modalCrearCliente').modal('show');
+
+          var formulario = document.getElementById("personaFisicaForm").querySelector("form");
+          formulario.action = `{% url 'clients:editar_cliente' %}`;
+
+          // Creacoin de campo oculto para enviar el id del cliente
+          var campoOculto = document.createElement("input");
+          campoOculto.type = "hidden";
+          campoOculto.name = "cliente_id";
+          campoOculto.id = "cliente_id";
+
+          // Establecer el valor del campo oculto
+          campoOculto.value = clientId;
+
+          // Agregar el campo oculto al formulario
+          formulario.appendChild(campoOculto);
+      });
+
+      // Función para manejar errores en las peticiones AJAX
+      function handleError(xhr) {
+          if (xhr.status === 400) { // Error de validación
+              var response = JSON.parse(xhr.responseText);
+              var errors = JSON.parse(response.errors);
+              var errorMessages = [];
+              for (var errorField in errors) {
+                  if (errors.hasOwnProperty(errorField)) {
+                      errors[errorField].forEach(function(error) {
+                          errorMessages.push(error.message);
+                      });
+                  }
+              }
+              Swal.fire({
+                  title: "Error en el formulario",
+                  text: errorMessages.join(', '),
+                  icon: "error"
+              });
+          } else { // Otros errores HTTP
+              Swal.fire({
+                  title: "Error",
+                  text: "Ocurrió un error inesperado: " + xhr.statusText,
+                  icon: "error"
+              });
+          }
+      }
   });
 </script>
+
 
 
   

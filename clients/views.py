@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .models import PersonaFisica, PersonaJuridica
 from .forms import PersonaFisicaForm, PersonaJuridicaForm
+from django.shortcuts import get_object_or_404
 
 def clientes_ruc_view(request):
     form_persona_fisica = PersonaFisicaForm(request.session.pop('form_data', None) if request.session.get('form_type') == 'fisica' else None)
@@ -51,12 +52,18 @@ def crear_cliente(request):
 
 def editar_cliente(request):
     if request.method == 'POST':
-        cliente_id = request.POST.get('clientId', None)
+        print(request.POST)
+        cliente_id = request.POST.get('cliente_id', None)
+        print(cliente_id)
         form_type = request.POST.get('form_type', None)
+        print(form_type)
         
         if form_type == 'fisica':
             cliente = PersonaFisica.objects.get(pk=cliente_id)
+            print(cliente)
+            print(type(cliente))
             form = PersonaFisicaForm(request.POST, instance=cliente)
+            print(form)
         elif form_type == 'juridica':
             cliente = PersonaJuridica.objects.get(pk=cliente_id)
             form = PersonaJuridicaForm(request.POST, instance=cliente)
@@ -71,3 +78,11 @@ def editar_cliente(request):
             return JsonResponse({'success': False, 'errors': errors}, status=400)
     else:
         return JsonResponse({'success': False, 'message': 'Método no permitido'}, status=405)
+
+def datos_faltantes(request, ruc):
+    persona = get_object_or_404(PersonaFisica, id=ruc)
+    data = {
+        'fecha_nacimiento': persona.fecha_nacimiento.strftime("%m-%d-%Y"),
+        'direccion': persona.direccion
+    }
+    return JsonResponse(data)
