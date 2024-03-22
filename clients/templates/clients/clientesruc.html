@@ -6,9 +6,9 @@
 
 <div class="content">
     <div class="container">
-        <div class="row align-items-center">
+        <div class="row align-items-center          ">
             <div class="col-md-6">
-                <h2 class="mb-4" style="text-align: center">Clientes RUC</h2>
+                <h2 class="mb-4">Clientes RUC</h2>
             </div>
             <div class="col-md-6 text-right">
                 <button type="button" class="btn btn-success" data-toggle="modal" data-target="#modalCrearCliente">
@@ -43,6 +43,9 @@
                         <td>Persona Física</td>
                         <td class="edit-cell">
                           <span class="material-symbols-outlined edit-icon" data-client-id="{{ persona.id }}">edit</span>
+                        </td>
+                        <td class="delete-cell">
+                          <span class="material-symbols-outlined delete-icon" data-client-id="{{ persona.id }}">delete</span>
                         </td>
                     {% endfor %}
                     {% for persona in personas_juridicas %}
@@ -350,8 +353,18 @@ document.addEventListener('DOMContentLoaded', function() {
     top: 20%;
     cursor: pointer;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    padding-left: 5px;
   }
 
+  .delete-icon {
+ /* ocultar por defecto */
+    position: absolute;
+    background-color: white;
+    right: -20px; /* ajustar según sea necesario para mover hacia la derecha */
+    top: 20%;
+    cursor: pointer;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
 .row-container {
   position: relative;
 }
@@ -362,8 +375,15 @@ document.addEventListener('DOMContentLoaded', function() {
   white-space: nowrap;
 }
 
-
 .edit-cell {
+  background-color: white !important;
+  visibility: hidden;
+  width: 1%; /* Asegúrate de que esta celda no ocupe mucho espacio */
+  white-space: nowrap; /* Evita que el contenido se ajuste en líneas */
+  position: relative; /* Posición relativa para el posicionamiento del ícono de edición */
+}
+
+.delete-cell {
   background-color: white !important;
   visibility: hidden;
   width: 1%; /* Asegúrate de que esta celda no ocupe mucho espacio */
@@ -373,6 +393,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 .table-row:hover .edit-cell {
+  visibility: visible; /* Muestra la celda de edición cuando se hace hover en la fila */
+  background-color: white ;
+}
+
+.table-row:hover .delete-cell {
   visibility: visible; /* Muestra la celda de edición cuando se hace hover en la fila */
   background-color: white ;
 }
