@@ -1,7 +1,0 @@
-env/
-db.sqlite3
-
-# Ignorar directorios __pycache__ de todas las aplicaciones
-**/__pycache__
-
-
