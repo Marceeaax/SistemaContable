@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <h3 class="mb-1">Bienvenido al Sistema Contable AG ASOCIADOS</h3>
+    <p class="text-muted mb-0">
+      Acceso r&aacute;pido a la n&oacute;mina de clientes y sus datos tributarios (RUC).
+    </p>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">CLIENTES &ndash; RUC</h5>
+
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm"
+         href="{{ url_for('bases_datos') }}">
+        Bases de datos
+      </a>
+
+      {% if session.get('logged_in') %}
+        <button class="btn btn-success btn-sm"
+                data-bs-toggle="modal"
+                data-bs-target="#clienteModal"
+                onclick="limpiarModalCliente()">
+          Nuevo cliente
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card-body p-0">
+    <div class="table-scroll">
+      <table class="table table-hover table-sm mb-0 align-middle">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th>Nombre / Raz&oacute;n Social</th>
+            <th>Tipo</th>
+            <th>RUC</th>
+            <th>Tel&eacute;fono</th>
+            <th>Correo SET</th>
+            <th>Contrase&ntilde;a SET</th>
+            <th>Venc.</th>
+          </tr>
+        </thead>
+        <tbody>
+
+        {% for c in clientes %}
+          {% if session.get('logged_in') %}
+          <tr class="cliente-row"
+              data-id="{{ c.id_cliente }}"
+              data-nombre="{{ c.nombre }}"
+              data-ruc="{{ c.ruc }}-{{ c.dv }}"
+              data-tipo="{{ c.tipo_persona }}"
+              data-telefono="{{ c.telefono or '' }}"
+              data-correo="{{ c.correo_set or '' }}"
+              data-password="{{ c.contrasena_set or '' }}"
+              data-venc="{{ c.vencimiento or '' }}"
+              style="cursor:pointer;">
+          {% else %}
+          <tr>
+          {% endif %}
+
+            <td class="fw-semibold">{{ c.nombre }}</td>
+            <td>{% if c.tipo_persona == 'F' %}Física{% else %}Jurídica{% endif %}</td>
+            <td>{{ c.ruc }}-{{ c.dv }}</td>
+            <td>{{ c.telefono or '' }}</td>
+            <td>{{ c.correo_set or '' }}</td>
+            <td>
+              <span class="badge bg-light text-dark border">
+                {{ c.contrasena_set or '' }}
+              </span>
+            </td>
+            <td class="text-center">{{ c.vencimiento or '' }}</td>
+          </tr>
+        {% endfor %}
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= MODAL CLIENTE ================= -->
+<div class="modal fade" id="clienteModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+
+      <form method="POST" action="{{ url_for('guardar_cliente') }}">
+
+        <div class="modal-header">
+          <h5 class="modal-title">Cliente</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+
+          <input type="hidden" name="id_cliente" id="cliente_id">
+
+          <div class="row g-2">
+
+            <div class="col-md-6">
+              <label class="form-label">Nombre / Raz&oacute;n Social</label>
+              <input id="cliente_nombre"
+                     name="nombre"
+                     class="form-control"
+                     required>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">RUC</label>
+              <input id="cliente_ruc"
+                     name="ruc"
+                     class="form-control"
+                     placeholder="1234567-8"
+                     required>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Tipo</label>
+              <select id="cliente_tipo"
+                      name="tipo_persona"
+                      class="form-select"
+                      required>
+                <option value="">Seleccione</option>
+                <option value="F">Persona Física</option>
+                <option value="J">Persona Jurídica</option>
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Tel&eacute;fono</label>
+              <input id="cliente_telefono"
+                     name="telefono"
+                     class="form-control">
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Vencimiento</label>
+              <input id="cliente_venc"
+                     name="vencimiento"
+                     class="form-control">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Correo SET</label>
+              <input id="cliente_correo"
+                     name="correo_set"
+                     class="form-control">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Contrase&ntilde;a SET</label>
+              <input id="cliente_password"
+                     name="contrasena_set"
+                     class="form-control">
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="modal-footer d-flex justify-content-between">
+
+          <a id="btnContabilidad"
+             href="#"
+             class="btn btn-outline-secondary">
+            Contabilidad
+          </a>
+
+          <div>
+            <button type="submit"
+                    class="btn btn-primary">
+              Guardar cambios
+            </button>
+          </div>
+
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if session.get('logged_in') %}
+<script>
+function limpiarModalCliente() {
+  document.getElementById("cliente_id").value = "";
+  document.getElementById("cliente_nombre").value = "";
+  document.getElementById("cliente_ruc").value = "";
+  document.getElementById("cliente_tipo").value = "";
+  document.getElementById("cliente_telefono").value = "";
+  document.getElementById("cliente_correo").value = "";
+  document.getElementById("cliente_password").value = "";
+  document.getElementById("cliente_venc").value = "";
+  document.getElementById("btnContabilidad").href = "#";
+}
+
+document.querySelectorAll(".cliente-row").forEach(row => {
+  row.addEventListener("click", () => {
+
+    const modalEl = document.getElementById("clienteModal");
+    if (!modalEl) return;
+
+    const modal = new bootstrap.Modal(modalEl);
+    const idCliente = row.dataset.id;
+
+    document.getElementById("cliente_id").value = idCliente;
+    document.getElementById("cliente_nombre").value = row.dataset.nombre;
+    document.getElementById("cliente_ruc").value = row.dataset.ruc;
+    document.getElementById("cliente_tipo").value = row.dataset.tipo;
+    document.getElementById("cliente_telefono").value = row.dataset.telefono;
+    document.getElementById("cliente_correo").value = row.dataset.correo;
+    document.getElementById("cliente_password").value = row.dataset.password;
+    document.getElementById("cliente_venc").value = row.dataset.venc;
+
+    document.getElementById("btnContabilidad").href =
+      `/cliente/${idCliente}/contabilidad`;
+
+    modal.show();
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

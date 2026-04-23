@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set url_nuevo = url_for('asiento_diario', id_cliente=id_cliente, nuevo=1, tipo=('APERTURA' if not asientos else 'DIARIO')) %}
+
+<div class="diario-book-page">
+  <div class="diario-book-window">
+    {% if nuevo %}
+    <form method="post"
+          action="{{ url_for('guardar_asiento_diario', id_cliente=id_cliente) }}"
+          id="formAsientoInline"
+          class="diario-book-form">
+      <input type="hidden" name="tipo_asiento" value="{{ tipo_nuevo }}">
+    {% endif %}
+
+    <div class="diario-titlebar">
+      <div>Asientos diarios</div>
+      <div class="diario-window-actions" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="diario-topbar">
+      <label>Asiento</label>
+      <input type="text"
+             class="diario-input diario-input-number text-end"
+             value="{{ proximo_numero_asiento if nuevo else (asiento_actual.numero_asiento if asiento_actual else '') }}"
+             readonly
+             tabindex="-1">
+
+      {% if nuevo %}
+      <select class="diario-input diario-select-short" name="referencia">
+        <option value="{{ tipo_nuevo }}">{{ 'Apertura' if tipo_nuevo == 'APERTURA' else 'Diario' }}</option>
+      </select>
+      {% else %}
+      <input type="text"
+             class="diario-input diario-select-short"
+             value="{{ asiento_actual.referencia if asiento_actual else 'Sin asientos' }}"
+             readonly
+             tabindex="-1">
+      {% endif %}
+
+      <label>Fecha</label>
+      <input type="date"
+             class="diario-input diario-input-date"
+             name="fecha"
+             value="{{ '2025-01-01' if nuevo and tipo_nuevo == 'APERTURA' else (asiento_actual.fecha.strftime('%Y-%m-%d') if asiento_actual else '') }}"
+             {% if not nuevo %}readonly tabindex="-1"{% else %}required{% endif %}>
+
+      <label>Concepto</label>
+      <input type="text"
+             class="diario-input diario-input-concepto"
+             name="descripcion"
+             value="{{ 'Apertura del ejercicio 2025' if nuevo and tipo_nuevo == 'APERTURA' else (asiento_actual.descripcion if asiento_actual else '') }}"
+             {% if not nuevo %}readonly tabindex="-1"{% else %}required{% endif %}>
+
+      <button class="diario-help" type="button">?</button>
+    </div>
+
+    <div class="diario-grid-wrap">
+      <table class="diario-grid-table">
+        <thead>
+          <tr>
+            <th>Cuenta</th>
+            <th>Denominación</th>
+            <th>Mon</th>
+            <th>Mon. Origen</th>
+            <th class="text-end">D é b i t o s&nbsp;&nbsp;GS.</th>
+            <th class="text-end">C r é d i t o s&nbsp;&nbsp;GS.</th>
+          </tr>
+        </thead>
+        <tbody id="lineasAsientoBody">
+          {% if nuevo %}
+            {% for _ in range(16) %}
+            <tr class="diario-empty-row">
+              <td>&nbsp;</td><td></td><td></td><td></td><td class="text-end"></td><td class="text-end"></td>
+            </tr>
+            {% endfor %}
+          {% elif lineas %}
+            {% for linea in lineas %}
+            <tr class="{{ 'diario-row-active' if loop.first else '' }}">
+              <td>{{ linea.codigo }}</td>
+              <td>{{ linea.denominacion }}</td>
+              <td>GS.</td>
+              <td></td>
+              <td class="text-end">{{ "{:,.2f}".format(linea.debe).replace(",", "X").replace(".", ",").replace("X", ".") if linea.debe else '' }}</td>
+              <td class="text-end">{{ "{:,.2f}".format(linea.haber).replace(",", "X").replace(".", ",").replace("X", ".") if linea.haber else '' }}</td>
+            </tr>
+            {% endfor %}
+            {% for _ in range(16 - (lineas|length if lineas|length < 16 else 16)) %}
+            <tr class="diario-empty-row">
+              <td>&nbsp;</td><td></td><td></td><td></td><td class="text-end"></td><td class="text-end"></td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            {% for _ in range(16) %}
+            <tr class="diario-empty-row">
+              <td>&nbsp;</td><td></td><td></td><td></td><td class="text-end"></td><td class="text-end"></td>
+            </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diario-totales">
+      <div class="diario-nav-arrows" aria-hidden="true">
+        <span>▲</span><span>▼</span>
+      </div>
+      <label class="diario-lines-check">
+        <input class="form-check-input" type="checkbox" checked>
+        Líneas
+      </label>
+      <label class="diario-lines-check">
+        <input class="form-check-input" type="checkbox">
+        Bloqueado
+      </label>
+      <div class="diario-total-box text-end" id="totalDebe">{{ "{:,.2f}".format(total_debe).replace(",", "X").replace(".", ",").replace("X", ".") if not nuevo else '0,00' }}</div>
+      <div class="diario-total-box text-end" id="totalHaber">{{ "{:,.2f}".format(total_haber).replace(",", "X").replace(".", ",").replace("X", ".") if not nuevo else '0,00' }}</div>
+    </div>
+
+    <div class="diario-editor">
+      <div class="diario-editor-head">
+        <span>Cuenta</span>
+        <span>D e n o m i n a c i ó n</span>
+        <span>Operación</span>
+        <span>Moneda</span>
+        <span>Importe Mon Origen</span>
+        <span>Importe GS.</span>
+      </div>
+
+      <div class="diario-editor-row">
+        <select class="diario-input diario-field-cuenta" id="lineaCuenta" {% if not nuevo %}disabled{% endif %}>
+          <option value="" data-codigo="" data-denominacion=""></option>
+          {% for cuenta in cuentas %}
+          <option value="{{ cuenta.id_cuenta }}"
+                  data-codigo="{{ cuenta.codigo }}"
+                  data-denominacion="{{ cuenta.denominacion }}">
+            {{ cuenta.codigo }}
+          </option>
+          {% endfor %}
+        </select>
+        <input class="diario-input diario-field-denom" id="lineaDenominacion" readonly tabindex="-1">
+        <select class="diario-input diario-field-operacion" id="lineaOperacion" {% if not nuevo %}disabled{% endif %}>
+          <option value="haber">Crédito</option>
+          <option value="debe">Débito</option>
+        </select>
+        <select class="diario-input diario-field-moneda" id="lineaMoneda" {% if not nuevo %}disabled{% endif %}>
+          <option>GS.</option>
+        </select>
+        <input class="diario-input diario-field-importe text-end" id="lineaImporteOrigen" {% if not nuevo %}readonly tabindex="-1"{% endif %}>
+        <input class="diario-input diario-field-importe text-end" id="lineaImporte" {% if not nuevo %}readonly tabindex="-1"{% endif %}>
+      </div>
+
+      <div class="diario-editor-lower">
+        <div class="diario-detail-area">
+          <label>Detalle&nbsp;&nbsp;[ F1 ] para abrir la ventana de edición</label>
+          <textarea class="diario-input" id="lineaGlosa" {% if not nuevo %}readonly tabindex="-1"{% endif %}></textarea>
+        </div>
+
+        <div class="diario-comprobante">
+          <label>Comprobante</label>
+          <input class="diario-input" id="lineaComprobante" {% if not nuevo %}readonly tabindex="-1"{% endif %}>
+        </div>
+
+        <div class="diario-actions">
+          <a class="diario-action-button"
+             href="{{ url_for('libro_iva', id_cliente=id_cliente) }}">
+            IVA
+          </a>
+          <button class="diario-action-button" type="button" id="btnAgregarLinea" {% if not nuevo %}disabled{% endif %}>Agregar</button>
+          <button class="diario-action-button" type="button" id="btnEliminarLinea" {% if not nuevo %}disabled{% endif %}>Eliminar</button>
+          <a class="diario-action-button"
+             href="{{ url_for('asiento_diario', id_cliente=id_cliente) }}">
+            Anular
+          </a>
+          <button class="diario-action-button" type="button" disabled>Predef</button>
+          <button class="diario-action-button" type="button">Imprimir</button>
+          {% if nuevo %}
+          <button class="diario-action-button" type="submit" id="btnGuardarAsiento">Guardar</button>
+          <a class="diario-action-button"
+             href="{{ url_for('asiento_diario', id_cliente=id_cliente) }}">
+            Terminar
+          </a>
+          {% else %}
+          <a class="diario-action-button"
+             id="btnNuevoAsiento"
+             data-url="{{ url_nuevo }}"
+             href="{{ url_nuevo }}">
+            +
+          </a>
+          <a class="diario-action-button"
+             href="{{ url_for('contabilidad_cliente', id_cliente=id_cliente) }}">
+            Salir
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if nuevo %}
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if nuevo %}
+<template id="lineaHiddenTemplate">
+  <input type="hidden" name="linea_id_cuenta[]">
+  <input type="hidden" name="linea_glosa[]">
+  <input type="hidden" name="linea_debe[]">
+  <input type="hidden" name="linea_haber[]">
+</template>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const btnNuevoAsiento = document.getElementById("btnNuevoAsiento");
+  const form = document.getElementById("formAsientoInline");
+  const tbody = document.getElementById("lineasAsientoBody");
+  const cuenta = document.getElementById("lineaCuenta");
+  const denominacion = document.getElementById("lineaDenominacion");
+  const operacion = document.getElementById("lineaOperacion");
+  const importeOrigen = document.getElementById("lineaImporteOrigen");
+  const importe = document.getElementById("lineaImporte");
+  const glosa = document.getElementById("lineaGlosa");
+  const btnAgregarLinea = document.getElementById("btnAgregarLinea");
+  const btnEliminarLinea = document.getElementById("btnEliminarLinea");
+  const totalDebe = document.getElementById("totalDebe");
+  const totalHaber = document.getElementById("totalHaber");
+  const currency = new Intl.NumberFormat("es-PY", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+  const lineas = [];
+
+  const normalizarNumero = (valor) => Number(String(valor || "0").replace(/\./g, "").replace(",", ".")) || 0;
+
+  const limpiarEditor = () => {
+    if (cuenta) cuenta.value = "";
+    if (denominacion) denominacion.value = "";
+    if (operacion) operacion.value = "haber";
+    if (importeOrigen) importeOrigen.value = "";
+    if (importe) importe.value = "";
+    if (glosa) glosa.value = "";
+    if (cuenta) cuenta.focus();
+  };
+
+  const renderLineas = () => {
+    if (!tbody || !form) return;
+
+    tbody.innerHTML = "";
+    form.querySelectorAll(".js-linea-hidden").forEach((el) => el.remove());
+
+    let debe = 0;
+    let haber = 0;
+
+    lineas.forEach((linea, index) => {
+      debe += linea.debe;
+      haber += linea.haber;
+
+      const tr = document.createElement("tr");
+      tr.className = index === lineas.length - 1 ? "diario-row-active" : "";
+      tr.dataset.index = index;
+      tr.innerHTML = `
+        <td>${linea.codigo}</td>
+        <td>${linea.denominacion}</td>
+        <td>GS.</td>
+        <td></td>
+        <td class="text-end">${linea.debe ? currency.format(linea.debe) : ""}</td>
+        <td class="text-end">${linea.haber ? currency.format(linea.haber) : ""}</td>
+      `;
+      tbody.appendChild(tr);
+
+      [["linea_id_cuenta[]", linea.idCuenta], ["linea_glosa[]", linea.glosa], ["linea_debe[]", linea.debe || ""], ["linea_haber[]", linea.haber || ""]].forEach(([name, value]) => {
+        const hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = name;
+        hidden.value = value;
+        hidden.className = "js-linea-hidden";
+        form.appendChild(hidden);
+      });
+    });
+
+    const filasVacias = Math.max(16 - lineas.length, 0);
+    for (let i = 0; i < filasVacias; i += 1) {
+      const tr = document.createElement("tr");
+      tr.className = "diario-empty-row";
+      tr.innerHTML = '<td>&nbsp;</td><td></td><td></td><td></td><td class="text-end"></td><td class="text-end"></td>';
+      tbody.appendChild(tr);
+    }
+
+    if (totalDebe) totalDebe.textContent = currency.format(debe);
+    if (totalHaber) totalHaber.textContent = currency.format(haber);
+  };
+
+  if (cuenta) {
+    cuenta.addEventListener("change", function () {
+      const selected = this.options[this.selectedIndex];
+      denominacion.value = selected.dataset.denominacion || "";
+    });
+  }
+
+  if (importeOrigen && importe) {
+    importeOrigen.addEventListener("input", function () {
+      importe.value = this.value;
+    });
+  }
+
+  if (btnAgregarLinea) {
+    btnAgregarLinea.addEventListener("click", function () {
+      if (!cuenta.value) {
+        Swal.fire("Cuenta requerida", "Seleccione una cuenta para agregar la línea.", "warning");
+        return;
+      }
+
+      const monto = normalizarNumero(importe.value || importeOrigen.value);
+      if (monto <= 0) {
+        Swal.fire("Importe requerido", "Ingrese un importe mayor a cero.", "warning");
+        return;
+      }
+
+      const selected = cuenta.options[cuenta.selectedIndex];
+      const esDebe = operacion.value === "debe";
+      lineas.push({
+        idCuenta: cuenta.value,
+        codigo: selected.dataset.codigo || selected.textContent.trim(),
+        denominacion: selected.dataset.denominacion || "",
+        glosa: glosa.value || "",
+        debe: esDebe ? monto : 0,
+        haber: esDebe ? 0 : monto
+      });
+
+      renderLineas();
+      limpiarEditor();
+    });
+  }
+
+  if (btnEliminarLinea) {
+    btnEliminarLinea.addEventListener("click", function () {
+      lineas.pop();
+      renderLineas();
+    });
+  }
+
+  if (form) {
+    form.addEventListener("submit", function (event) {
+      renderLineas();
+      if (lineas.length < 2) {
+        event.preventDefault();
+        Swal.fire("Asiento incompleto", "Debe agregar al menos dos líneas antes de guardar.", "warning");
+      }
+    });
+  }
+
+  if (btnNuevoAsiento) {
+    btnNuevoAsiento.addEventListener("click", function (event) {
+      event.preventDefault();
+      window.location.href = this.dataset.url;
+    });
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (!btnNuevoAsiento) return;
+
+    const target = event.target;
+    const escribiendo = target && (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable
+    );
+
+    if (escribiendo) return;
+
+    if (event.key === "+" || event.key === "Add") {
+      event.preventDefault();
+      window.location.href = btnNuevoAsiento.dataset.url;
+    }
+  });
+
+  {% if mostrar_alerta_apertura %}
+  Swal.fire({
+    title: "Cliente sin asientos",
+    text: "El primer asiento puede registrarse como apertura. Si querés, te llevo directo a la carga.",
+    icon: "info",
+    showCancelButton: true,
+    confirmButtonText: "Crear apertura",
+    cancelButtonText: "Después"
+  }).then((result) => {
+    if (result.isConfirmed) {
+      window.location.href = "{{ url_for('asiento_diario', id_cliente=id_cliente, nuevo=1, tipo='APERTURA') }}";
+    }
+  });
+  {% endif %}
+});
+</script>
+{% endblock %}

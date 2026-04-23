@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body d-flex justify-content-between align-items-center">
+    <div>
+      <h3 class="mb-1">Bases de datos</h3>
+      <p class="text-muted mb-0">Acceso a consultas auxiliares del sistema.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">Volver</a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header">
+    <h5 class="mb-0">Consultas disponibles</h5>
+  </div>
+  <div class="card-body d-flex gap-2 flex-wrap">
+    <button class="btn btn-primary"
+            type="button"
+            data-bs-toggle="modal"
+            data-bs-target="#modalConsultaPersonas">
+      Consulta de personas
+    </button>
+    <button class="btn btn-outline-primary"
+            type="button"
+            data-bs-toggle="modal"
+            data-bs-target="#modalBusquedaPersonas">
+      Buscar por nombre y apellido
+    </button>
+  </div>
+</div>
+
+<div class="modal fade" id="modalConsultaPersonas" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Consulta de personas</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="numeroCedula" class="form-label">Número de cédula</label>
+          <input type="text"
+                 class="form-control"
+                 id="numeroCedula"
+                 inputmode="numeric"
+                 autocomplete="off"
+                 placeholder="Ingrese la cédula">
+        </div>
+
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Nombre</label>
+            <input type="text" class="form-control" id="personaNombre" readonly tabindex="-1">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Apellido</label>
+            <input type="text" class="form-control" id="personaApellido" readonly tabindex="-1">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Fecha de nacimiento</label>
+            <input type="date" class="form-control" id="personaFechaNac" readonly tabindex="-1">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="btnBuscarPersona">Consultar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalBusquedaPersonas" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Buscar por nombre y apellido</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-5">
+            <label for="personaBusquedaNombre" class="form-label">Nombre</label>
+            <input type="text"
+                   class="form-control"
+                   id="personaBusquedaNombre"
+                   autocomplete="off"
+                   placeholder="Buscar por nombre">
+          </div>
+          <div class="col-md-5">
+            <label for="personaBusquedaApellido" class="form-label">Apellido</label>
+            <input type="text"
+                   class="form-control"
+                   id="personaBusquedaApellido"
+                   autocomplete="off"
+                   placeholder="Buscar por apellido">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-primary w-100" id="btnBuscarPersonaNombre">
+              Buscar
+            </button>
+          </div>
+        </div>
+
+        <div class="border rounded" style="max-height: 320px; overflow: auto;">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th style="width: 130px;">Cédula</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th style="width: 150px;">Fecha nac.</th>
+              </tr>
+            </thead>
+            <tbody id="tablaResultadosPersonas">
+              <tr>
+                <td colspan="4" class="text-muted text-center py-3">
+                  Sin resultados cargados.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const modalConsulta = document.getElementById("modalConsultaPersonas");
+  const modalBusqueda = document.getElementById("modalBusquedaPersonas");
+  const numeroCedula = document.getElementById("numeroCedula");
+  const personaNombre = document.getElementById("personaNombre");
+  const personaApellido = document.getElementById("personaApellido");
+  const personaFechaNac = document.getElementById("personaFechaNac");
+  const btnBuscarPersona = document.getElementById("btnBuscarPersona");
+  const btnBuscarPersonaNombre = document.getElementById("btnBuscarPersonaNombre");
+  const personaBusquedaNombre = document.getElementById("personaBusquedaNombre");
+  const personaBusquedaApellido = document.getElementById("personaBusquedaApellido");
+  const tablaResultadosPersonas = document.getElementById("tablaResultadosPersonas");
+
+  const limpiarResultado = () => {
+    personaNombre.value = "";
+    personaApellido.value = "";
+    personaFechaNac.value = "";
+  };
+
+  const renderResultados = (personas) => {
+    if (!tablaResultadosPersonas) return;
+
+    if (!personas || !personas.length) {
+      tablaResultadosPersonas.innerHTML = `
+        <tr>
+          <td colspan="4" class="text-muted text-center py-3">No se encontraron coincidencias.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    tablaResultadosPersonas.innerHTML = "";
+    personas.forEach((persona) => {
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.innerHTML = `
+        <td>${persona.numero || ""}</td>
+        <td>${persona.nombre || ""}</td>
+        <td>${persona.apellido || ""}</td>
+        <td>${persona.fecha_nac || ""}</td>
+      `;
+
+      tr.addEventListener("click", function () {
+        numeroCedula.value = persona.numero || "";
+        personaNombre.value = persona.nombre || "";
+        personaApellido.value = persona.apellido || "";
+        personaFechaNac.value = persona.fecha_nac || "";
+      });
+
+      tablaResultadosPersonas.appendChild(tr);
+    });
+  };
+
+  const consultarPersona = () => {
+    const numero = (numeroCedula.value || "").trim();
+    if (!numero) {
+      Swal.fire("Dato requerido", "Ingrese el número de cédula.", "warning");
+      numeroCedula.focus();
+      return;
+    }
+
+    btnBuscarPersona.disabled = true;
+    fetch(`{{ url_for('consulta_personas_ref') }}?numero_cedula=${encodeURIComponent(numero)}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "No se pudo consultar la persona.");
+        }
+        return data;
+      })
+      .then((data) => {
+        limpiarResultado();
+        if (!data.persona) {
+          Swal.fire("Sin resultados", "No se encontró una persona para esa cédula.", "info");
+          return;
+        }
+
+        personaNombre.value = data.persona.nombre || "";
+        personaApellido.value = data.persona.apellido || "";
+        personaFechaNac.value = data.persona.fecha_nac || "";
+      })
+      .catch((error) => {
+        Swal.fire("Error", error.message, "error");
+      })
+      .finally(() => {
+        btnBuscarPersona.disabled = false;
+      });
+  };
+
+  const buscarPorNombreApellido = () => {
+    const nombre = (personaBusquedaNombre.value || "").trim();
+    const apellido = (personaBusquedaApellido.value || "").trim();
+
+    if (!nombre && !apellido) {
+      Swal.fire("Dato requerido", "Ingrese nombre, apellido o ambos.", "warning");
+      personaBusquedaNombre.focus();
+      return;
+    }
+
+    btnBuscarPersonaNombre.disabled = true;
+    fetch(`{{ url_for('buscar_personas_ref_por_nombre_apellido') }}?nombre=${encodeURIComponent(nombre)}&apellido=${encodeURIComponent(apellido)}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "No se pudo realizar la búsqueda.");
+        }
+        return data;
+      })
+      .then((data) => {
+        renderResultados(data.personas || []);
+      })
+      .catch((error) => {
+        Swal.fire("Error", error.message, "error");
+      })
+      .finally(() => {
+        btnBuscarPersonaNombre.disabled = false;
+      });
+  };
+
+  if (modalConsulta) {
+    modalConsulta.addEventListener("shown.bs.modal", function () {
+      numeroCedula.focus();
+      numeroCedula.select();
+    });
+
+    modalConsulta.addEventListener("hidden.bs.modal", function () {
+      numeroCedula.value = "";
+      limpiarResultado();
+    });
+  }
+
+  if (modalBusqueda) {
+    modalBusqueda.addEventListener("shown.bs.modal", function () {
+      personaBusquedaNombre.focus();
+      renderResultados([]);
+    });
+
+    modalBusqueda.addEventListener("hidden.bs.modal", function () {
+      personaBusquedaNombre.value = "";
+      personaBusquedaApellido.value = "";
+      renderResultados([]);
+    });
+  }
+
+  if (numeroCedula) {
+    numeroCedula.addEventListener("input", function () {
+      this.value = this.value.replace(/\D/g, "");
+    });
+
+    numeroCedula.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        consultarPersona();
+      }
+    });
+  }
+
+  if (btnBuscarPersona) {
+    btnBuscarPersona.addEventListener("click", consultarPersona);
+  }
+
+  [personaBusquedaNombre, personaBusquedaApellido].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        buscarPorNombreApellido();
+      }
+    });
+  });
+
+  if (btnBuscarPersonaNombre) {
+    btnBuscarPersonaNombre.addEventListener("click", buscarPorNombreApellido);
+  }
+});
+</script>
+{% endblock %}

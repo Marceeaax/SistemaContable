@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <h4 class="mb-1">Módulo de Contabilidad General</h4>
+    <p class="text-muted mb-0">
+      Cliente: <span class="fw-semibold">{{ cliente_nombre }}</span>
+      <span class="text-muted"> (ID {{ id_cliente }})</span>
+    </p>
+  </div>
+</div>
+
+<!-- MENÚ CONTABLE -->
+<nav class="menu-contable shadow-sm">
+  <ul class="menu-root">
+
+    <!-- ARCHIVOS -->
+    <li>
+      <span>Archivos</span>
+      <ul class="submenu">
+        <li><a class="submenu-link" href="#">Monedas</a></li>
+        <li><a class="submenu-link" href="#">Orígenes de asientos</a></li>
+        <li><a class="submenu-link" href="#">Tipos de comprobantes</a></li>
+        <li><a class="submenu-link" href="#">Tipos y cuentas de IVA</a></li>
+        <li><a class="submenu-link" href="#">Clases de asientos predefinidos</a></li>
+        <li><a class="submenu-link" href="#">Creación / modificación de asientos predefinidos</a></li>
+
+        <li class="divider"></li>
+
+        <!-- ✅ LINK REAL -->
+        <li>
+          <a class="submenu-link" href="{{ url_for('plan_cuentas', id_cliente=id_cliente) }}">
+            Plan general de cuentas
+          </a>
+        </li>
+
+        <li><a class="submenu-link" href="#">Cuentas Resolución SET 173/2004</a></li>
+        <li><a class="submenu-link" href="#">Clientes y Proveedores (RUCs)</a></li>
+
+        <li class="divider"></li>
+
+        <li><a class="submenu-link" href="#">Presupuesto mensual</a></li>
+        <li><a class="submenu-link" href="#">Usuarios y accesos</a></li>
+        <li><a class="submenu-link" href="#">Configuración de la impresora</a></li>
+      </ul>
+    </li>
+
+    <!-- ASIENTOS -->
+    <li>
+      <span>Asientos</span>
+      <ul class="submenu">
+        <li>
+          <a class="submenu-link" href="{{ url_for('asiento_diario', id_cliente=id_cliente) }}">
+            Carga / generación de asientos diarios
+          </a>
+        </li>
+        <li>
+          <a class="submenu-link"
+            href="{{ url_for('libro_iva', id_cliente=id_cliente) }}">
+            Comprobantes para libros de IVA
+          </a>
+        </li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Cierre del ejercicio</a></li>
+        <li><a class="submenu-link" href="#">Apertura del ejercicio</a></li>
+      </ul>
+    </li>
+
+    <!-- INFORMES -->
+    <li>
+      <span>Informes</span>
+      <ul class="submenu">
+        <li><a class="submenu-link" href="#">Libro diario</a></li>
+        <li><a class="submenu-link" href="#">Libro mayor</a></li>
+        <li><a class="submenu-link" href="#">Libro inventario</a></li>
+        <li><a class="submenu-link" href="#">Libros de compras y ventas</a></li>
+        <li><a class="submenu-link" href="#">Resumen de comprobantes por RUC</a></li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Balance de comprobación / sumas y saldos</a></li>
+        <li><a class="submenu-link" href="#">Balance general / Estado de resultados</a></li>
+        <li><a class="submenu-link" href="#">Balance general / Estado de resultados multicolumnas</a></li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Balance general – Resolución 173/04</a></li>
+        <li><a class="submenu-link" href="#">Estado de resultados – Resolución 173/04</a></li>
+        <li><a class="submenu-link" href="#">Variación del patrimonio neto – Resolución 173/04</a></li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Balance impositivo 8 columnas (antes Res. 173/04)</a></li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Balance general / resultados proyectados</a></li>
+        <li><a class="submenu-link" href="#">Balance general / resultados comparados</a></li>
+      </ul>
+    </li>
+
+    <!-- UTILITARIOS -->
+    <li>
+      <span>Utilitarios</span>
+      <ul class="submenu">
+        <li><a class="submenu-link" href="#">Reorganización de archivos</a></li>
+        <li><a class="submenu-link" href="#">Renumeración de asientos</a></li>
+        <li><a class="submenu-link" href="#">Cambio global de códigos de cuenta</a></li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Impresión de hojas para rubricar</a></li>
+        <li class="divider"></li>
+        <li><a class="submenu-link" href="#">Crear copia de respaldo</a></li>
+        <li><a class="submenu-link" href="#">Recuperar copia de respaldo</a></li>
+      </ul>
+    </li>
+
+    <!-- AYUDA -->
+    <li>
+      <span>Ayuda</span>
+      <ul class="submenu">
+        <li><a class="submenu-link" href="#">Temas de ayuda</a></li>
+        <li><a class="submenu-link" href="#">Activación del programa</a></li>
+        <li><a class="submenu-link" href="#">Ubicación de los archivos</a></li>
+        <li><a class="submenu-link" href="#">Acerca del programa</a></li>
+      </ul>
+    </li>
+
+    <!-- SALIR (solo vuelve al inicio) -->
+    <li>
+      <a href="{{ url_for('index') }}">Salir</a>
+    </li>
+
+  </ul>
+</nav>
+
+<div class="card shadow-sm">
+  <div class="card-body text-muted">
+    Seleccione una opción del menú para comenzar.
+  </div>
+</div>
+
+{% endblock %}

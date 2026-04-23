@@ -1,0 +1,53 @@
+select * from cuenta_contable
+
+WITH activo AS (
+    SELECT id_cuenta 
+    FROM cuenta_contable 
+    WHERE id_cliente = 24 AND codigo = '1'
+)
+INSERT INTO cuenta_contable
+(id_cliente, codigo, denominacion, categoria, imputable, id_cuenta_madre)
+SELECT 24,'11','DISPONIBILIDADES',1,false,id_cuenta FROM activo
+UNION ALL
+SELECT 24,'12','CUENTAS POR COBRAR',1,false,id_cuenta FROM activo
+UNION ALL
+SELECT 24,'13','BIENES DE CAMBIO',1,false,id_cuenta FROM activo
+UNION ALL
+SELECT 24,'14','ACTIVO FIJO',1,false,id_cuenta FROM activo
+UNION ALL
+SELECT 24,'15','OTROS ACTIVOS',1,false,id_cuenta FROM activo;
+
+
+WITH cxc AS (
+    SELECT id_cuenta 
+    FROM cuenta_contable 
+    WHERE id_cliente = 24 AND codigo = '12'
+)
+INSERT INTO cuenta_contable
+(id_cliente, codigo, denominacion, alias, categoria, imputable, id_cuenta_madre, cuenta_r173)
+VALUES
+(24,'121','Clientes','CLIE',2,true,(SELECT id_cuenta FROM cxc),'1.01.03.01'),
+(24,'122','Deudores por Ventas','DEUDORES',2,true,(SELECT id_cuenta FROM cxc),'1.01.03.11'),
+(24,'123','Deudores Varios','DEUVARIOS',2,true,(SELECT id_cuenta FROM cxc),'1.01.03.11');
+
+WITH cxc AS (
+    SELECT id_cuenta 
+    FROM cuenta_contable 
+    WHERE id_cliente = 24 AND codigo = '13'
+)
+INSERT INTO cuenta_contable
+(id_cliente, codigo, denominacion, alias, categoria, imputable, id_cuenta_madre, cuenta_r173)
+VALUES
+(24,'131','Mercaderias','MERCA',2,true,(SELECT id_cuenta FROM cxc),'1.01.10.01');
+
+
+select * from asiento_linea
+select * from asiento
+
+SELECT * FROM CUENTA_CONTABLE
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+UPDATE cuenta_contable
+SET id_cuenta_madre = 43
+WHERE codigo = '211' AND id_cliente = 24;

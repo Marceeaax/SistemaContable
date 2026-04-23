@@ -1,0 +1,1186 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="iva-book-page">
+  <div class="iva-book-window">
+    <div class="iva-book-titlebar">
+      <div class="iva-book-title">Comprobantes para libros de IVA - Cliente: {{ id_cliente }}</div>
+      <div class="iva-book-window-actions" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="iva-book-table-wrap">
+      <table class="iva-book-table">
+        <thead>
+          <tr>
+            <th>asiento</th>
+            <th>Fecha</th>
+            <th>Comprobante</th>
+            <th>R.U.C.</th>
+            <th>Nombre o razón social (por RUC)</th>
+            <th class="text-end">Exento</th>
+            <th class="text-end">Gravado 5%</th>
+            <th class="text-end">I.V.A. 5%</th>
+            <th class="text-end">Gravado 10%</th>
+            <th class="text-end">I.V.A. 10%</th>
+            <th class="text-end">T O T A L</th>
+            <th>Mon</th>
+            <th class="text-end">T.Cambio</th>
+            <th>Tipo de I.V.A.</th>
+          </tr>
+        </thead>
+        <tbody id="ivaBookTableBody">
+          {% for comprobante in comprobantes %}
+          {% set row_payload = {
+            "id_comprobante_iva": comprobante.id_comprobante_iva,
+            "id_asiento": comprobante.id_asiento,
+            "numero_asiento": comprobante.numero_asiento,
+            "id_tipo_documento": comprobante.id_tipo_documento,
+            "id_tipo_iva": comprobante.id_tipo_iva,
+            "documento_codigo": comprobante.documento_codigo,
+            "fecha": comprobante.fecha.strftime('%Y-%m-%d') if comprobante.fecha else '',
+            "numero_comprobante": comprobante.numero_comprobante or '',
+            "comprobante": (comprobante.documento_codigo ~ '-' ~ comprobante.numero_comprobante) if comprobante.documento_codigo and comprobante.numero_comprobante else (comprobante.numero_comprobante or ''),
+            "condicion": comprobante.condicion or 'Contado',
+            "ruc": comprobante.ruc or '',
+            "razon_social": comprobante.razon_social or '',
+            "id_cuenta": comprobante.id_cuenta,
+            "cuenta_codigo": comprobante.cuenta_codigo or '',
+            "cuenta_nombre": comprobante.cuenta_nombre or '',
+            "id_cta_iva_5": comprobante.id_cta_iva_5,
+            "cta_iva_5_codigo": comprobante.cta_iva_5_codigo or '',
+            "cta_iva_5_nombre": comprobante.cta_iva_5_nombre or '',
+            "id_cta_iva_10": comprobante.id_cta_iva_10,
+            "cta_iva_10_codigo": comprobante.cta_iva_10_codigo or '',
+            "cta_iva_10_nombre": comprobante.cta_iva_10_nombre or '',
+            "id_contracuenta": comprobante.id_contracuenta,
+            "contracuenta_codigo": comprobante.contracuenta_codigo or '',
+            "contracuenta_nombre": comprobante.contracuenta_nombre or '',
+            "detalle": comprobante.detalle or '',
+            "exento": comprobante.exento|string,
+            "gravado_5": comprobante.gravado_5|string,
+            "iva_5": comprobante.iva_5|string,
+            "gravado_10": comprobante.gravado_10|string,
+            "iva_10": comprobante.iva_10|string,
+            "total": comprobante.total|string,
+            "moneda": comprobante.moneda or 'GS.',
+            "tipo_cambio": comprobante.tipo_cambio|string if comprobante.tipo_cambio is not none else '1,00',
+            "tipo_iva_denominacion": comprobante.tipo_iva_denominacion or ''
+          } %}
+          <tr class="iva-book-data-row{% if id_asiento_seleccionado and comprobante.id_asiento == id_asiento_seleccionado %} iva-book-row-selected{% endif %}"
+              data-id-comprobante="{{ comprobante.id_comprobante_iva }}"
+              data-id-asiento="{{ comprobante.id_asiento }}"
+              data-comprobante='{{ row_payload|tojson|forceescape }}'>
+            <td>{{ comprobante.numero_asiento }}</td>
+            <td>{{ comprobante.fecha.strftime('%d/%m/%Y') if comprobante.fecha else '' }}</td>
+            <td>{{ comprobante.documento_codigo }}-{{ comprobante.numero_comprobante }}</td>
+            <td>{{ comprobante.ruc or '' }}</td>
+            <td>{{ comprobante.razon_social or '' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(comprobante.exento).replace(",", ".") if comprobante.exento else '' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(comprobante.gravado_5).replace(",", ".") if comprobante.gravado_5 else '' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(comprobante.iva_5).replace(",", ".") if comprobante.iva_5 else '' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(comprobante.gravado_10).replace(",", ".") if comprobante.gravado_10 else '' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(comprobante.iva_10).replace(",", ".") if comprobante.iva_10 else '' }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(comprobante.total).replace(",", ".") if comprobante.total else '' }}</td>
+            <td>{{ comprobante.moneda or 'GS.' }}</td>
+            <td class="text-end">{{ comprobante.tipo_cambio or '1,00' }}</td>
+            <td>{{ comprobante.tipo_iva_denominacion or '' }}</td>
+          </tr>
+          {% endfor %}
+          {% for _ in range(28 - (comprobantes|length if comprobantes|length < 28 else 28)) %}
+          <tr>
+            <td>&nbsp;</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td></td>
+            <td class="text-end"></td>
+            <td></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="iva-book-scrollbar" aria-hidden="true">
+      <span></span>
+    </div>
+
+    <div class="iva-book-footer">
+      <div class="iva-book-footer-left">
+        <label class="iva-book-lines">
+          <input class="form-check-input" type="checkbox" checked>
+          Líneas
+        </label>
+        <button class="iva-book-help" type="button">?</button>
+        <button class="iva-book-button" type="button">Mostrar Todos</button>
+      </div>
+
+      <div class="iva-book-footer-right">
+        <button class="iva-book-button" type="button">Buscar</button>
+        <button class="iva-book-button"
+                type="button"
+                id="btnAgregarIva"
+                data-bs-toggle="modal"
+                data-bs-target="#modalComprobanteIva">
+          Agregar
+        </button>
+        <button class="iva-book-button" type="button">Eliminar</button>
+        <button class="iva-book-button" type="button" id="btnModificarIva">Modificar</button>
+        <button class="iva-book-button" type="button">Incluir</button>
+        <button class="iva-book-button" type="button">Excluir</button>
+        <button class="iva-book-button" type="button">Imprimir</button>
+        <a class="iva-book-button iva-book-link"
+           href="{{ url_for('asiento_diario', id_cliente=id_cliente) }}">
+          Volver
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--
+<div class="iva-shell">
+  <section class="iva-main">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-2">
+            <label class="form-label">Tipo</label>
+            <select class="form-select" id="filtroTipo">
+              <option value="COMPRA" {% if tipo == 'COMPRA' %}selected{% endif %}>Compras</option>
+              <option value="VENTA" {% if tipo == 'VENTA' %}selected{% endif %}>Ventas</option>
+            </select>
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Desde</label>
+            <input type="date" class="form-control" value="2025-01-01">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Hasta</label>
+            <input type="date" class="form-control" value="2025-12-31">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Moneda</label>
+            <select class="form-select">
+              <option>Gs.</option>
+              <option>USD</option>
+            </select>
+          </div>
+
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100">Buscar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="iva-table-wrap">
+          <table class="table table-sm table-hover align-middle mb-0 iva-table">
+            <thead class="table-dark sticky-top">
+              <tr>
+                <th style="width:70px;">Asiento</th>
+                <th style="width:100px;">Fecha</th>
+                <th style="width:180px;">Comprobante</th>
+                <th style="width:120px;">R.U.C.</th>
+                <th style="width:240px;">Nombre o razón social</th>
+                <th class="text-end" style="width:110px;">Exento</th>
+                <th class="text-end" style="width:120px;">Gravado 5%</th>
+                <th class="text-end" style="width:110px;">IVA 5%</th>
+                <th class="text-end" style="width:120px;">Gravado 10%</th>
+                <th class="text-end" style="width:110px;">IVA 10%</th>
+                <th class="text-end" style="width:120px;">Total</th>
+                <th style="width:70px;">Mon</th>
+                <th style="width:90px;">T.Cambio</th>
+                <th style="width:170px;">Tipo de IVA</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="14" class="text-center text-muted py-5">
+                  Todavía no hay registros cargados para este libro.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm">Mostrar Todos</button>
+          <button class="btn btn-outline-primary btn-sm">Buscar</button>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-success btn-sm"
+                  type="button"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalComprobanteIva">
+            Agregar
+          </button>
+          <button class="btn btn-danger btn-sm">Eliminar</button>
+          <button class="btn btn-warning btn-sm">Modificar</button>
+          <button class="btn btn-outline-info btn-sm">Incluir</button>
+          <button class="btn btn-outline-secondary btn-sm">Excluir</button>
+          <button class="btn btn-dark btn-sm">Imprimir</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="iva-side">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="mb-2">Resumen</h6>
+        <div class="small text-muted mb-3">
+          {{ 'Libro de compras' if tipo == 'COMPRA' else 'Libro de ventas' }}
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span>Tipo actual</span>
+          <strong>{{ tipo }}</strong>
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span>Registros visibles</span>
+          <strong>0</strong>
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span>Moneda</span>
+          <strong>GS.</strong>
+        </div>
+        <div class="d-flex justify-content-between py-1">
+          <span>Modo</span>
+          <strong>Consulta</strong>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+-->
+
+<div class="modal fade" id="modalComprobanteIva" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered iva-modal-dialog">
+    <div class="modal-content iva-modal-content">
+      <div class="modal-header iva-modal-header">
+        <h5 class="modal-title" id="modalComprobanteIvaTitle">Agregar comprobantes para libros IVA</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+
+      <div class="modal-body">
+        <form id="formComprobanteIva">
+          <input type="hidden" name="tipo_libro" value="{{ tipo }}">
+          <input type="hidden" name="id_comprobante_iva" id="id_comprobante_iva">
+          <div class="iva-modal-grid">
+            <div class="iva-modal-row iva-modal-row-top">
+              <div class="iva-modal-label">Comprobante</div>
+              <div class="iva-modal-top-main">
+                <select class="form-select form-select-sm" name="sigla" style="max-width: 72px;">
+                  {% for doc in tipos_documento %}
+                  <option value="{{ doc.id_tipo_documento }}"
+                          data-codigo="{{ doc.codigo }}"
+                          title="{{ doc.descripcion }}"
+                          {% if loop.first %}selected{% endif %}>
+                    {{ doc.codigo }}
+                  </option>
+                  {% endfor %}
+                </select>
+                <input class="form-control form-control-sm" name="numero" placeholder="">
+                <select class="form-select form-select-sm" name="condicion" style="max-width: 112px;">
+                  <option>Contado</option>
+                  <option>Crédito</option>
+                </select>
+              </div>
+              <div class="iva-modal-label iva-modal-label-inline">Fecha</div>
+              <div class="iva-modal-top-date">
+                <input type="date" class="form-control form-control-sm" name="fecha" value="2025-01-03">
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label">R.U.C.</div>
+              <div class="iva-modal-code-cell">
+                <input class="form-control form-control-sm iva-code-input" name="ruc" id="ruc_codigo" autocomplete="off">
+              </div>
+              <div class="iva-modal-display-cell position-relative">
+                <input class="form-control form-control-sm iva-display-input" name="nombre_razon" id="ruc_nombre" readonly tabindex="-1">
+                <div id="ruc_lista" class="list-group position-absolute w-100 iva-sugerencias"></div>
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label">Cuenta</div>
+              <div class="iva-modal-code-cell">
+                <input id="cuenta_codigo" name="cuenta_codigo" class="form-control form-control-sm iva-code-input" autocomplete="off">
+                <input type="hidden" id="cuenta_id" name="cuenta_id">
+              </div>
+              <div class="iva-modal-display-cell position-relative">
+                <input id="cuenta_nombre" name="cuenta_nombre" class="form-control form-control-sm iva-display-input" readonly tabindex="-1">
+                <div id="cuenta_lista" class="list-group position-absolute w-100 iva-sugerencias"></div>
+              </div>
+            </div>
+
+            <div class="iva-modal-row iva-modal-row-type">
+              <div class="iva-modal-label">Tipo de IVA</div>
+              <div class="iva-modal-type-main">
+                <select class="form-select form-select-sm" name="id_tipo_iva" id="tipoIvaSelect">
+                  {% for tipo_iva in tipos_iva %}
+                  <option value="{{ tipo_iva.id_tipo_iva }}"
+                          data-cuenta-iva-5="{{ tipo_iva.cuenta_iva_5_codigo or '' }}"
+                          data-cuenta-iva-10="{{ tipo_iva.cuenta_iva_10_codigo or '' }}"
+                          data-incluido="{{ '1' if tipo_iva.incluido else '0' }}">
+                    {{ tipo_iva.denominacion }}
+                  </option>
+                  {% endfor %}
+                </select>
+                <input type="hidden" name="iva_incluido" id="ivaIncluido">
+                <select class="form-select form-select-sm" name="tipo_operacion" style="max-width: 52px;">
+                  <option>{{ 'D' if tipo == 'COMPRA' else 'C' }}</option>
+                  <option>{{ 'C' if tipo == 'COMPRA' else 'D' }}</option>
+                </select>
+              </div>
+              <div class="iva-modal-label iva-modal-label-inline">Mon/Cambio</div>
+              <div class="iva-modal-type-side">
+                <select class="form-select form-select-sm" name="moneda" style="max-width: 66px;">
+                  <option>GS.</option>
+                  <option>USD</option>
+                </select>
+                <input class="form-control form-control-sm text-end" name="tipo_cambio" value="1,00">
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label">Cta IVA 5%</div>
+              <div class="iva-modal-code-cell">
+                <input class="form-control form-control-sm iva-code-input" name="cta_iva_5" id="cta_iva_5_codigo" autocomplete="off">
+                <input type="hidden" name="cta_iva_5_id" id="cta_iva_5_id">
+              </div>
+              <div class="iva-modal-display-cell position-relative">
+                <input class="form-control form-control-sm iva-display-input" name="cta_iva_5_nombre" id="cta_iva_5_nombre" readonly tabindex="-1">
+                <div id="cta_iva_5_lista" class="list-group position-absolute w-100 iva-sugerencias"></div>
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label">Cta IVA 10%</div>
+              <div class="iva-modal-code-cell">
+                <input class="form-control form-control-sm iva-code-input" name="cta_iva_10" id="cta_iva_10_codigo" autocomplete="off">
+                <input type="hidden" name="cta_iva_10_id" id="cta_iva_10_id">
+              </div>
+              <div class="iva-modal-display-cell position-relative">
+                <input class="form-control form-control-sm iva-display-input" name="cta_iva_10_nombre" id="cta_iva_10_nombre" readonly tabindex="-1">
+                <div id="cta_iva_10_lista" class="list-group position-absolute w-100 iva-sugerencias"></div>
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label">Contracuenta</div>
+              <div class="iva-modal-code-cell">
+                <input class="form-control form-control-sm iva-code-input" name="contracuenta" id="contracuenta_codigo" autocomplete="off">
+                <input type="hidden" name="contracuenta_id" id="contracuenta_id">
+              </div>
+              <div class="iva-modal-display-cell position-relative">
+                <input class="form-control form-control-sm iva-display-input" name="contracuenta_nombre" id="contracuenta_nombre" readonly tabindex="-1">
+                <div id="contracuenta_lista" class="list-group position-absolute w-100 iva-sugerencias"></div>
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label">Detalle</div>
+              <div class="iva-modal-detail-cell iva-modal-detail-wide">
+                <input class="form-control form-control-sm" name="detalle">
+              </div>
+            </div>
+
+            <div class="iva-modal-row">
+              <div class="iva-modal-label"></div>
+              <div class="iva-modal-check-cell iva-modal-detail-wide">
+                <div class="form-check mt-1">
+                  <input class="form-check-input" type="checkbox" id="detalleExtendido" name="detalle_extendido">
+                  <label class="form-check-label" for="detalleExtendido">
+                    Agregar el Nro del comprobante y el RUC al detalle del asiento
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="iva-modal-footer-area">
+            <div class="iva-modal-totales">
+              <div class="iva-modal-totales-head">
+                <div></div>
+                <div>Exento</div>
+                <div>Gravado 5%</div>
+                <div>Gravado 10%</div>
+              </div>
+
+              <div class="iva-modal-totales-row">
+                <div class="iva-modal-totales-label">Totales</div>
+                <input id="exento" name="exento" class="form-control form-control-sm text-end" value="0">
+                <input id="gravado5" name="gravado_5" class="form-control form-control-sm text-end" value="0">
+                <input id="gravado10" name="gravado_10" class="form-control form-control-sm text-end" value="0">
+              </div>
+
+              <div class="iva-modal-totales-row iva-modal-totales-row-short">
+                <div class="iva-modal-totales-label">IVAs</div>
+                <div></div>
+                <input id="iva5" name="iva_5" class="form-control form-control-sm text-end">
+                <input id="iva10" name="iva_10" class="form-control form-control-sm text-end">
+              </div>
+
+              <div class="iva-modal-totales-row iva-modal-totales-row-short">
+                <div class="iva-modal-totales-label">Total IVA/NETO</div>
+                <div></div>
+                <input id="ivaTotalFinal" name="total_iva" class="form-control form-control-sm text-end" readonly tabindex="-1">
+                <input id="totalFinal" name="total" class="form-control form-control-sm text-end fw-bold" readonly tabindex="-1">
+              </div>
+            </div>
+
+            <div class="iva-modal-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="btnGuardarIva">Guardar</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="btnTerminarIva">Terminar</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const filtroTipo = document.getElementById("filtroTipo");
+    const modalElement = document.getElementById("modalComprobanteIva");
+    const modal = modalElement ? bootstrap.Modal.getOrCreateInstance(modalElement) : null;
+    const modalTitle = document.getElementById("modalComprobanteIvaTitle");
+    const ivaBookTableBody = document.getElementById("ivaBookTableBody");
+    const form = document.getElementById("formComprobanteIva");
+    const btnAgregarIva = document.getElementById("btnAgregarIva");
+    const btnModificarIva = document.getElementById("btnModificarIva");
+    const btnGuardar = document.getElementById("btnGuardarIva");
+    const btnTerminar = document.getElementById("btnTerminarIva");
+    const tipoIvaSelect = document.getElementById("tipoIvaSelect");
+    const ivaIncluido = document.getElementById("ivaIncluido");
+    const fechaComprobante = form ? form.querySelector("input[name='fecha']") : null;
+    const idComprobanteIva = document.getElementById("id_comprobante_iva");
+    const monedaSelect = form ? form.querySelector("[name='moneda']") : null;
+    const inputCuenta = document.getElementById("cuenta_codigo");
+    const listaCuenta = document.getElementById("cuenta_lista");
+    const nombreCuenta = document.getElementById("cuenta_nombre");
+    const idCuenta = document.getElementById("cuenta_id");
+    const rucCodigo = document.getElementById("ruc_codigo");
+    const rucNombre = document.getElementById("ruc_nombre");
+    const rucLista = document.getElementById("ruc_lista");
+    const exento = document.getElementById("exento");
+    const gravado5 = document.getElementById("gravado5");
+    const gravado10 = document.getElementById("gravado10");
+    const iva5 = document.getElementById("iva5");
+    const iva10 = document.getElementById("iva10");
+    const ivaTotalFinal = document.getElementById("ivaTotalFinal");
+    const totalFinal = document.getElementById("totalFinal");
+    let estadoInicial = "";
+    let cerrarForzado = false;
+    const cuentaCampos = [
+        { inputId: "cuenta_codigo", hiddenId: "cuenta_id", label: "Cuenta", requerido: () => true },
+        { inputId: "contracuenta_codigo", hiddenId: "contracuenta_id", label: "Contracuenta", requerido: () => true },
+        { inputId: "cta_iva_5_codigo", hiddenId: "cta_iva_5_id", label: "Cuenta IVA 5%", requerido: () => parseMonto(iva5.value) > 0 },
+        { inputId: "cta_iva_10_codigo", hiddenId: "cta_iva_10_id", label: "Cuenta IVA 10%", requerido: () => parseMonto(iva10.value) > 0 }
+    ];
+    let filaSeleccionada = ivaBookTableBody ? ivaBookTableBody.querySelector(".iva-book-row-selected") : null;
+    let comprobanteSeleccionado = filaSeleccionada?.dataset.comprobante ? JSON.parse(filaSeleccionada.dataset.comprobante) : null;
+
+    const snapshotFormulario = () => {
+        if (!form) return "";
+
+        const datos = [];
+        form.querySelectorAll("input, select, textarea").forEach((field) => {
+            if (field.readOnly || field.disabled || field.type === "hidden") {
+                return;
+            }
+
+            if (field.type === "checkbox") {
+                datos.push(`${field.name}:${field.checked ? 1 : 0}`);
+            } else {
+                datos.push(`${field.name}:${(field.value || "").trim()}`);
+            }
+        });
+
+        return datos.join("|");
+    };
+
+    const hayCambiosPendientes = () => snapshotFormulario() !== estadoInicial;
+    const esMonedaGuaranies = () => (monedaSelect?.value || "GS.").toUpperCase() === "GS.";
+    const redondearMonto = (valor) => {
+        const numero = parseMonto(valor);
+        if (esMonedaGuaranies()) {
+            return Math.round(numero);
+        }
+        return Number(numero.toFixed(2));
+    };
+    const formatoGs = (valor) => {
+        const numero = Number(valor || 0);
+        return numero ? new Intl.NumberFormat("es-PY", { maximumFractionDigits: 0 }).format(numero) : "";
+    };
+    const formatoDecimal = (valor) => {
+        const numero = redondearMonto(valor);
+        if (!numero) return "";
+        return esMonedaGuaranies() ? String(numero) : numero.toFixed(2);
+    };
+    const normalizarInputMonto = (input) => {
+        if (!input) return;
+        if (esMonedaGuaranies()) {
+            input.value = input.value.replace(/\D/g, "");
+            return;
+        }
+
+        const limpio = input.value.replace(/[^0-9.,]/g, "");
+        input.value = limpio;
+    };
+    const formatearCampoMonto = (input) => {
+        if (!input) return;
+        const numero = redondearMonto(input.value);
+        input.value = numero ? (esMonedaGuaranies() ? String(numero) : numero.toFixed(2)) : "";
+    };
+    const formatearCamposMonto = () => {
+        [exento, gravado5, gravado10, iva5, iva10, ivaTotalFinal, totalFinal].forEach((input) => {
+            if (input) {
+                formatearCampoMonto(input);
+            }
+        });
+    };
+    const parsePayloadFila = (row) => {
+        if (!row?.dataset?.comprobante) return null;
+        try {
+            return JSON.parse(row.dataset.comprobante);
+        } catch (error) {
+            return null;
+        }
+    };
+    const setTituloModal = (esEdicion) => {
+        if (modalTitle) {
+            modalTitle.textContent = esEdicion ? "Modificar comprobantes para libros IVA" : "Agregar comprobantes para libros IVA";
+        }
+    };
+    const registrarFilaComprobante = (row) => {
+        if (!row || row.dataset.boundClick === "1") return;
+        row.dataset.boundClick = "1";
+        row.addEventListener("click", function () {
+            seleccionarFila(row);
+        });
+        row.addEventListener("dblclick", function () {
+            seleccionarFila(row);
+            abrirModalModificar();
+        });
+    };
+    const seleccionarFila = (row) => {
+        if (!row || !row.classList.contains("iva-book-data-row")) return;
+        if (filaSeleccionada) {
+            filaSeleccionada.classList.remove("iva-book-row-selected");
+        }
+        filaSeleccionada = row;
+        filaSeleccionada.classList.add("iva-book-row-selected");
+        comprobanteSeleccionado = parsePayloadFila(row);
+    };
+    const setLookupValue = (baseId, codigo, nombre, id) => {
+        const inputCodigo = document.getElementById(`${baseId}_codigo`);
+        const inputNombre = document.getElementById(`${baseId}_nombre`);
+        const inputId = document.getElementById(`${baseId}_id`);
+        const lista = document.getElementById(`${baseId}_lista`);
+        if (inputCodigo) inputCodigo.value = codigo || "";
+        if (inputNombre) inputNombre.value = nombre || "";
+        if (inputId) inputId.value = id || "";
+        if (lista) lista.innerHTML = "";
+    };
+    const cargarFormularioDesdeComprobante = (comprobante) => {
+        if (!form || !comprobante) return;
+        limpiarErroresValidacion();
+        if (idComprobanteIva) idComprobanteIva.value = comprobante.id_comprobante_iva || "";
+        form.querySelector("[name='sigla']").value = comprobante.id_tipo_documento || "";
+        form.querySelector("[name='numero']").value = comprobante.numero_comprobante || "";
+        form.querySelector("[name='condicion']").value = comprobante.condicion || "Contado";
+        form.querySelector("[name='fecha']").value = comprobante.fecha || "";
+        rucCodigo.value = comprobante.ruc || "";
+        rucNombre.value = comprobante.razon_social || "";
+        setLookupValue("cuenta", comprobante.cuenta_codigo, comprobante.cuenta_nombre, comprobante.id_cuenta);
+        if (tipoIvaSelect) {
+            tipoIvaSelect.value = comprobante.id_tipo_iva || "";
+        }
+        aplicarTipoIva();
+        setLookupValue("cta_iva_5", comprobante.cta_iva_5_codigo, comprobante.cta_iva_5_nombre, comprobante.id_cta_iva_5);
+        setLookupValue("cta_iva_10", comprobante.cta_iva_10_codigo, comprobante.cta_iva_10_nombre, comprobante.id_cta_iva_10);
+        setLookupValue("contracuenta", comprobante.contracuenta_codigo, comprobante.contracuenta_nombre, comprobante.id_contracuenta);
+        form.querySelector("[name='detalle']").value = comprobante.detalle || "";
+        form.querySelector("[name='moneda']").value = comprobante.moneda || "GS.";
+        form.querySelector("[name='tipo_cambio']").value = comprobante.tipo_cambio || "1,00";
+        exento.value = formatoDecimal(comprobante.exento);
+        gravado5.value = formatoDecimal(comprobante.gravado_5);
+        gravado10.value = formatoDecimal(comprobante.gravado_10);
+        iva5.value = formatoDecimal(comprobante.iva_5);
+        iva10.value = formatoDecimal(comprobante.iva_10);
+        recalcularTotalesFinales();
+        formatearCamposMonto();
+        setTituloModal(true);
+        estadoInicial = snapshotFormulario();
+    };
+    const abrirModalNuevo = () => {
+        limpiarFormulario();
+        if (idComprobanteIva) idComprobanteIva.value = "";
+        setTituloModal(false);
+        aplicarTipoIva();
+        estadoInicial = snapshotFormulario();
+        modal.show();
+    };
+    const abrirModalModificar = () => {
+        if (!comprobanteSeleccionado) {
+            Swal.fire({
+                icon: "warning",
+                title: "Seleccione un comprobante",
+                text: "Primero elija una fila del libro IVA para poder modificarla."
+            });
+            return;
+        }
+        cargarFormularioDesdeComprobante(comprobanteSeleccionado);
+        modal.show();
+    };
+    const actualizarFilaComprobante = (row, comprobante) => {
+        if (!row || !comprobante) return;
+        row.dataset.idComprobante = comprobante.id_comprobante_iva || "";
+        row.dataset.idAsiento = comprobante.id_asiento || "";
+        row.dataset.comprobante = JSON.stringify(comprobante);
+        row.innerHTML = `
+            <td>${comprobante.numero_asiento || ""}</td>
+            <td>${comprobante.fecha ? comprobante.fecha.split("-").reverse().join("/") : ""}</td>
+            <td>${comprobante.comprobante || ""}</td>
+            <td>${comprobante.ruc || ""}</td>
+            <td>${comprobante.razon_social || ""}</td>
+            <td class="text-end">${formatoGs(comprobante.exento)}</td>
+            <td class="text-end">${formatoGs(comprobante.gravado_5)}</td>
+            <td class="text-end">${formatoGs(comprobante.iva_5)}</td>
+            <td class="text-end">${formatoGs(comprobante.gravado_10)}</td>
+            <td class="text-end">${formatoGs(comprobante.iva_10)}</td>
+            <td class="text-end">${formatoGs(comprobante.total)}</td>
+            <td>${comprobante.moneda || "GS."}</td>
+            <td class="text-end">${comprobante.tipo_cambio || "1,00"}</td>
+            <td>${comprobante.tipo_iva_denominacion || ""}</td>
+        `;
+        seleccionarFila(row);
+    };
+
+    const agregarComprobanteAGrilla = (comprobante) => {
+        if (!ivaBookTableBody || !comprobante) return;
+
+        if (comprobante.id_comprobante_iva) {
+            const filaExistente = ivaBookTableBody.querySelector(`tr[data-id-comprobante="${comprobante.id_comprobante_iva}"]`);
+            if (filaExistente) {
+                actualizarFilaComprobante(filaExistente, comprobante);
+                filaExistente.classList.add("iva-book-row-new");
+                filaExistente.scrollIntoView({ block: "nearest" });
+                setTimeout(() => filaExistente.classList.remove("iva-book-row-new"), 1800);
+                return;
+            }
+        }
+
+        const filaVacia = Array.from(ivaBookTableBody.querySelectorAll("tr")).find((row) => {
+            const primeraCelda = row.querySelector("td:first-child");
+            return primeraCelda && !primeraCelda.textContent.trim() && !row.classList.contains("iva-book-data-row");
+        });
+
+        const tr = document.createElement("tr");
+        tr.className = "iva-book-data-row iva-book-row-new";
+        actualizarFilaComprobante(tr, comprobante);
+        registrarFilaComprobante(tr);
+
+        if (filaVacia) {
+            ivaBookTableBody.insertBefore(tr, filaVacia);
+            filaVacia.remove();
+        } else {
+            ivaBookTableBody.appendChild(tr);
+        }
+
+        tr.scrollIntoView({ block: "nearest" });
+        seleccionarFila(tr);
+        setTimeout(() => tr.classList.remove("iva-book-row-new"), 1800);
+    };
+
+    const limpiarFormulario = () => {
+        form.reset();
+        limpiarErroresValidacion();
+        if (idComprobanteIva) idComprobanteIva.value = "";
+        if (nombreCuenta) nombreCuenta.value = "";
+        if (idCuenta) idCuenta.value = "";
+        if (rucNombre) rucNombre.value = "";
+        if (listaCuenta) listaCuenta.innerHTML = "";
+        if (rucLista) rucLista.innerHTML = "";
+        [
+            ["cta_iva_5_nombre", "cta_iva_5_id", "cta_iva_5_lista"],
+            ["cta_iva_10_nombre", "cta_iva_10_id", "cta_iva_10_lista"],
+            ["contracuenta_nombre", "contracuenta_id", "contracuenta_lista"]
+        ].forEach(([nombreId, hiddenId, listaId]) => {
+            const nombre = document.getElementById(nombreId);
+            const hidden = document.getElementById(hiddenId);
+            const lista = document.getElementById(listaId);
+            if (nombre) nombre.value = "";
+            if (hidden) hidden.value = "";
+            if (lista) lista.innerHTML = "";
+        });
+        calcular();
+        estadoInicial = snapshotFormulario();
+    };
+
+    const parseMonto = (valor) => {
+        const texto = String(valor || "0").trim();
+        if (texto.includes(",")) {
+            return parseFloat(texto.replace(/\./g, "").replace(",", ".")) || 0;
+        }
+        if ((texto.match(/\./g) || []).length >= 1 && texto.split(".").at(-1).length === 3) {
+            return parseFloat(texto.replace(/\./g, "")) || 0;
+        }
+        return parseFloat(texto) || 0;
+    };
+
+    const recalcularTotalesFinales = () => {
+        const ex = redondearMonto(exento.value);
+        const g5 = redondearMonto(gravado5.value);
+        const g10 = redondearMonto(gravado10.value);
+        const valorIva5 = redondearMonto(iva5.value);
+        const valorIva10 = redondearMonto(iva10.value);
+        const iva = valorIva5 + valorIva10;
+        const total = ex + g5 + g10 + iva;
+
+        ivaTotalFinal.value = esMonedaGuaranies() ? String(iva) : iva.toFixed(2);
+        totalFinal.value = esMonedaGuaranies() ? String(total) : total.toFixed(2);
+    };
+
+    const calcular = () => {
+        if (!exento) return;
+
+        const g5 = redondearMonto(gravado5.value);
+        const g10 = redondearMonto(gravado10.value);
+
+        const calculadoIva5 = esMonedaGuaranies() ? Math.round(g5 * 0.05) : Number((g5 * 0.05).toFixed(2));
+        const calculadoIva10 = esMonedaGuaranies() ? Math.round(g10 * 0.10) : Number((g10 * 0.10).toFixed(2));
+        iva5.value = esMonedaGuaranies() ? String(calculadoIva5) : calculadoIva5.toFixed(2);
+        iva10.value = esMonedaGuaranies() ? String(calculadoIva10) : calculadoIva10.toFixed(2);
+        recalcularTotalesFinales();
+    };
+
+    const marcarCampoInvalido = (input, invalido) => {
+        if (!input) return;
+        input.classList.toggle("is-invalid", invalido);
+    };
+
+    const limpiarErroresValidacion = () => {
+        if (fechaComprobante) fechaComprobante.classList.remove("is-invalid");
+        cuentaCampos.forEach(({ inputId }) => {
+            const input = document.getElementById(inputId);
+            if (input) input.classList.remove("is-invalid");
+        });
+    };
+
+    const marcarErrorBackend = (field) => {
+        if (!field) return;
+        const input = document.getElementById(field) || form.querySelector(`[name="${field}"]`);
+        marcarCampoInvalido(input, true);
+        if (input) input.focus();
+    };
+
+    const validarAntesDeGuardar = () => {
+        limpiarErroresValidacion();
+
+        if (fechaComprobante && fechaComprobante.value) {
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            const fecha = new Date(`${fechaComprobante.value}T00:00:00`);
+            if (fecha > hoy) {
+                marcarCampoInvalido(fechaComprobante, true);
+                fechaComprobante.focus();
+                return "No se puede cargar una factura con fecha futura.";
+            }
+        }
+
+        for (const campo of cuentaCampos) {
+            const input = document.getElementById(campo.inputId);
+            const hidden = document.getElementById(campo.hiddenId);
+            const requerido = campo.requerido();
+
+            if (!requerido && (!input || !input.value.trim())) {
+                continue;
+            }
+
+            if (!input || !input.value.trim() || !hidden || !hidden.value) {
+                marcarCampoInvalido(input, true);
+                if (input) input.focus();
+                return `${campo.label} no existe en el plan de cuentas de este cliente.`;
+            }
+        }
+
+        return "";
+    };
+
+    if (filtroTipo) {
+        filtroTipo.addEventListener("change", function () {
+            const params = new URLSearchParams(window.location.search);
+            params.set("tipo", this.value);
+            window.location.search = params.toString();
+        });
+    }
+
+    if (form) {
+        estadoInicial = snapshotFormulario();
+    }
+
+    [exento, gravado5, gravado10].forEach((input) => {
+        if (input) {
+            input.addEventListener("input", function () {
+                normalizarInputMonto(input);
+                calcular();
+            });
+            input.addEventListener("blur", function () {
+                formatearCampoMonto(input);
+                calcular();
+            });
+        }
+    });
+
+    [iva5, iva10].forEach((input) => {
+        if (input) {
+            input.addEventListener("input", function () {
+                normalizarInputMonto(input);
+                recalcularTotalesFinales();
+            });
+            input.addEventListener("blur", function () {
+                formatearCampoMonto(input);
+                recalcularTotalesFinales();
+            });
+        }
+    });
+
+    if (monedaSelect) {
+        monedaSelect.addEventListener("change", function () {
+            formatearCamposMonto();
+            recalcularTotalesFinales();
+        });
+    }
+
+    if (modalElement) {
+        modalElement.addEventListener("shown.bs.modal", function () {
+            cerrarForzado = false;
+            if (!idComprobanteIva?.value) {
+                aplicarTipoIva();
+                setTituloModal(false);
+            }
+            estadoInicial = snapshotFormulario();
+        });
+
+        modalElement.addEventListener("hide.bs.modal", function (event) {
+            if (cerrarForzado || !hayCambiosPendientes()) {
+                cerrarForzado = false;
+                return;
+            }
+
+            event.preventDefault();
+            Swal.fire({
+                icon: "warning",
+                title: "Hay datos sin guardar",
+                text: "Si sale ahora, se perderán los datos cargados en este comprobante.",
+                showCancelButton: true,
+                confirmButtonText: "Salir de todos modos",
+                cancelButtonText: "Volver a la carga",
+                confirmButtonColor: "#d33"
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    limpiarFormulario();
+                    cerrarForzado = true;
+                    modal.hide();
+                }
+            });
+        });
+    }
+
+    if (btnGuardar) {
+        btnGuardar.addEventListener("click", function () {
+            calcular();
+            const errorValidacion = validarAntesDeGuardar();
+            if (errorValidacion) {
+                Swal.fire({
+                    icon: "warning",
+                    title: "Revisar datos",
+                    text: errorValidacion
+                });
+                return;
+            }
+
+            btnGuardar.disabled = true;
+
+            fetch("{{ url_for('guardar_libro_iva', id_cliente=id_cliente) }}", {
+                method: "POST",
+                body: new FormData(form)
+            })
+                .then(async (response) => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        const error = new Error(data.error || "No se pudo guardar el comprobante.");
+                        error.field = data.field || "";
+                        throw error;
+                    }
+                    return data;
+                })
+                .then((data) => {
+                    const selectedTipoIvaText = tipoIvaSelect ? tipoIvaSelect.options[tipoIvaSelect.selectedIndex]?.textContent.trim() : "";
+                    data.comprobante.tipo_iva_denominacion = selectedTipoIvaText || data.comprobante.tipo_iva_denominacion || "";
+                    agregarComprobanteAGrilla(data.comprobante);
+                    Swal.fire({
+                        icon: "success",
+                        title: "Comprobante guardado",
+                        text: `Se generó el asiento N° ${data.numero_asiento}.`,
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => {
+                        limpiarFormulario();
+                        if (inputCuenta) {
+                            inputCuenta.focus();
+                        }
+                    });
+                })
+                .catch((error) => {
+                    Swal.fire({
+                        icon: "error",
+                        title: "No se pudo guardar",
+                        text: error.message
+                    });
+                    if (error.field) {
+                        marcarErrorBackend(error.field);
+                    }
+                })
+                .finally(() => {
+                    btnGuardar.disabled = false;
+                });
+        });
+    }
+
+    if (btnAgregarIva) {
+        btnAgregarIva.addEventListener("click", function (event) {
+            event.preventDefault();
+            abrirModalNuevo();
+        });
+    }
+
+    if (btnModificarIva) {
+        btnModificarIva.addEventListener("click", function () {
+            abrirModalModificar();
+        });
+    }
+
+    if (btnTerminar) {
+        btnTerminar.addEventListener("click", function () {
+            if (hayCambiosPendientes()) {
+                Swal.fire({
+                    icon: "warning",
+                    title: "Hay datos sin guardar",
+                    text: "Si termina ahora, se perderán los datos cargados en este comprobante.",
+                    showCancelButton: true,
+                    confirmButtonText: "Salir de todos modos",
+                    cancelButtonText: "Volver a la carga",
+                    confirmButtonColor: "#d33"
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        limpiarFormulario();
+                        cerrarForzado = true;
+                        modal.hide();
+                    }
+                });
+                return;
+            }
+
+            modal.hide();
+        });
+    }
+
+    const bindCuentaLookup = ({ inputId, displayId, hiddenId, listId }) => {
+        const input = document.getElementById(inputId);
+        const display = document.getElementById(displayId);
+        const hidden = document.getElementById(hiddenId);
+        const list = document.getElementById(listId);
+        if (!input || !display || !list) return;
+
+        const resolverCuenta = (field) => {
+            const q = field.value.trim();
+            if (q.length < 1) {
+                display.value = "";
+                list.innerHTML = "";
+                if (hidden) hidden.value = "";
+                field.classList.remove("is-invalid");
+                return Promise.resolve();
+            }
+
+            if (hidden) hidden.value = "";
+            field.classList.remove("is-invalid");
+            list.innerHTML = "";
+
+            return fetch(`{{ url_for('buscar_cuentas', id_cliente=id_cliente) }}?q=${encodeURIComponent(q)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.length) {
+                        display.value = "";
+                        field.classList.add("is-invalid");
+                        return;
+                    }
+
+                    const exacta = data.find((cuenta) => String(cuenta.codigo || "").trim() === q);
+                    const first = exacta || data[0];
+                    display.value = first.nombre || "";
+
+                    if (exacta) {
+                        if (hidden) hidden.value = exacta.id_cuenta || "";
+                        field.classList.remove("is-invalid");
+                    } else {
+                        field.classList.add("is-invalid");
+                    }
+                })
+                .catch(() => {
+                    display.value = "";
+                    field.classList.add("is-invalid");
+                });
+        };
+
+        input.addEventListener("input", function () {
+            if (hidden) hidden.value = "";
+            input.classList.remove("is-invalid");
+            list.innerHTML = "";
+        });
+
+        input.addEventListener("blur", function () {
+            resolverCuenta(this);
+        });
+
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === "Tab") {
+                resolverCuenta(this);
+            }
+        });
+    };
+
+    const completarCuentaPorCodigo = (inputId, codigo) => {
+        const input = document.getElementById(inputId);
+        if (!input || !codigo) return;
+
+        input.value = codigo;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    const aplicarTipoIva = () => {
+        if (!tipoIvaSelect) return;
+
+        const selected = tipoIvaSelect.options[tipoIvaSelect.selectedIndex];
+        if (!selected) return;
+
+        if (ivaIncluido) {
+            ivaIncluido.value = selected.dataset.incluido || "0";
+        }
+
+        completarCuentaPorCodigo("cta_iva_5_codigo", selected.dataset.cuentaIva5 || "");
+        completarCuentaPorCodigo("cta_iva_10_codigo", selected.dataset.cuentaIva10 || "");
+    };
+
+    const bindRucLookup = () => {
+        if (!rucCodigo || !rucNombre || !rucLista) return;
+
+        const buscarPersonaPorRuc = (q) => {
+            const rucLimpio = String(q || "").trim();
+            if (!rucLimpio || !rucLimpio.startsWith("8")) {
+                return Promise.resolve([]);
+            }
+
+            return fetch(`{{ url_for('buscar_personas_ref') }}?q=${encodeURIComponent(rucLimpio)}`)
+                .then((r) => r.json())
+                .catch(() => []);
+        };
+
+        const completarRucDesdeLookup = () => {
+            const q = rucCodigo.value.trim();
+            if (!q || !q.startsWith("8")) {
+                return;
+            }
+
+            buscarPersonaPorRuc(q).then((data) => {
+                if (!Array.isArray(data) || !data.length) {
+                    rucNombre.value = "";
+                    return;
+                }
+
+                const coincidenciaExacta = data.find((persona) => String(persona.numero || "").trim() === q);
+                const persona = coincidenciaExacta || data[0];
+                rucNombre.value = persona?.nombre || "";
+            });
+        };
+
+        rucCodigo.addEventListener("input", function () {
+            rucLista.innerHTML = "";
+            if (!this.value.trim()) {
+                rucNombre.value = "";
+            }
+        });
+
+        rucCodigo.addEventListener("blur", function () {
+            completarRucDesdeLookup();
+            rucLista.innerHTML = "";
+        });
+
+        rucCodigo.addEventListener("keydown", function (event) {
+            if (event.key === "Tab" || event.key === "Enter") {
+                completarRucDesdeLookup();
+            }
+        });
+    };
+
+    bindRucLookup();
+    bindCuentaLookup({ inputId: "cuenta_codigo", displayId: "cuenta_nombre", hiddenId: "cuenta_id", listId: "cuenta_lista" });
+    bindCuentaLookup({ inputId: "cta_iva_5_codigo", displayId: "cta_iva_5_nombre", hiddenId: "cta_iva_5_id", listId: "cta_iva_5_lista" });
+    bindCuentaLookup({ inputId: "cta_iva_10_codigo", displayId: "cta_iva_10_nombre", hiddenId: "cta_iva_10_id", listId: "cta_iva_10_lista" });
+    bindCuentaLookup({ inputId: "contracuenta_codigo", displayId: "contracuenta_nombre", hiddenId: "contracuenta_id", listId: "contracuenta_lista" });
+
+    if (tipoIvaSelect) {
+        tipoIvaSelect.addEventListener("change", aplicarTipoIva);
+        aplicarTipoIva();
+    }
+
+    if (ivaBookTableBody) {
+        ivaBookTableBody.querySelectorAll(".iva-book-data-row").forEach((row) => {
+            registrarFilaComprobante(row);
+        });
+    }
+
+    if (filaSeleccionada) {
+        seleccionarFila(filaSeleccionada);
+        filaSeleccionada.scrollIntoView({ block: "nearest" });
+    } else if (ivaBookTableBody) {
+        const primeraFila = ivaBookTableBody.querySelector(".iva-book-data-row");
+        if (primeraFila) {
+            seleccionarFila(primeraFila);
+        }
+    }
+
+    calcular();
+
+    {% if nuevo %}
+    modal.show();
+    {% endif %}
+});
+</script>
+{% endblock %}

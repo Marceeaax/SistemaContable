@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body d-flex justify-content-between align-items-center">
+    <div>
+      <h4 class="mb-1">Plan general de cuentas</h4>
+      <div class="text-muted">Cliente ID {{ id_cliente }}</div>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm"
+       href="{{ url_for('contabilidad_cliente', id_cliente=id_cliente) }}">
+      Volver
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Plan de cuentas</h5>
+    <div class="d-flex gap-2">
+      {% if sin_cuentas and clientes_origen %}
+      <button class="btn btn-outline-primary btn-sm"
+              type="button"
+              data-bs-toggle="modal"
+              data-bs-target="#modalImportarPlan">
+        Importar de otro cliente
+      </button>
+      {% endif %}
+      <button class="btn btn-primary btn-sm"
+              data-bs-toggle="modal"
+              data-bs-target="#modalNuevaCuenta">
+        + Nueva cuenta
+      </button>
+    </div>
+    <div class="text-muted small">
+      Total: {{ cuentas|length }}
+    </div>
+  </div>
+
+  <div class="card-body p-0">
+    <div class="table-scroll-plan">
+      <table class="table table-sm mb-0 align-middle table-hover">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th style="width:110px;">Código</th>
+            <th>Denominación</th>
+            <th style="width:120px;">Alias</th>
+            <th style="width:60px;" class="text-center">Cat</th>
+            <th style="width:110px;">Tipo</th>
+            <th style="width:110px;" class="text-center">Totalizadora</th>
+            <th style="width:140px;">Cuenta R.173/04</th>
+            <th>Denominación Cta. R.173/04</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for c in cuentas %}
+            {% set tipo = 'Imputable' if c[5] else 'Total' %}
+            <tr
+              class="cuenta-row {% if not c[5] %}row-total{% endif %}"
+              style="cursor:pointer;"
+              data-id="{{ c[0] }}"
+              data-codigo="{{ c[1] }}"
+              data-denominacion="{{ c[2] }}"
+              data-alias="{{ c[3] or '' }}"
+              data-imputable="{{ 'true' if c[5] else 'false' }}"
+              data-madre="{{ c[6] if c[6] else '' }}"
+            >
+              <td class="fw-semibold">{{ c[1] }}</td>
+              <td>
+                <span style="padding-left: {{ c[9] * 20 }}px;"></span>
+                {% if not c[5] %}
+                  <span class="fw-bold text-uppercase">{{ c[2] }}</span>
+                {% else %}
+                  {{ c[2] }}
+                {% endif %}
+              </td>
+              <td class="text-muted">{{ c[3] }}</td>
+              <td class="text-center">{{ c[4] }}</td>
+              <td>
+                <span class="badge {% if c[5] %}bg-primary{% else %}bg-secondary{% endif %}">
+                  {{ tipo }}
+                </span>
+              </td>
+              <td class="text-center">
+                {% if not c[5] %}
+                  <span class="badge bg-light text-dark border">Sí</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{{ c[7] }}</td>
+              <td class="text-muted">{{ c[8] }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-5">
+                Este cliente todavía no tiene cuentas cargadas.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalImportarPlan" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST"
+          action="{{ url_for('importar_plan_cuentas', id_cliente=id_cliente) }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Importar plan de cuentas</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">
+            Este cliente no tiene cuentas cargadas. Puede importar el plan completo desde otro cliente.
+          </p>
+
+          <div class="mb-2">
+            <label>Cliente origen</label>
+            <select name="id_cliente_origen" class="form-select" required>
+              <option value="">Seleccione un cliente...</option>
+              {% for cliente in clientes_origen %}
+              <option value="{{ cliente.id_cliente }}">
+                {{ cliente.nombre }} ({{ cliente.total_cuentas }} cuentas)
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-primary">Importar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="modalNuevaCuenta" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST"
+          action="{{ url_for('nueva_cuenta', id_cliente=id_cliente) }}"
+          id="formNuevaCuenta">
+      <input type="hidden" name="id_cuenta" value="{{ id_cuenta or '' }}">
+      <input type="hidden" name="forzar" value="{{ '1' if forzar else '0' }}">
+
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitulo">
+            {{ 'Editar cuenta' if id_cuenta else 'Nueva cuenta' }}
+          </h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="mb-2">
+            <label>Código</label>
+            <input name="codigo"
+                   type="text"
+                   class="form-control"
+                   value="{{ codigo or '' }}"
+                   inputmode="numeric"
+                   pattern="[0-9]+"
+                   oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                   required>
+          </div>
+
+          <div class="mb-2">
+            <label>Denominación</label>
+            <input name="denominacion"
+                   class="form-control"
+                   value="{{ denominacion or '' }}"
+                   required>
+          </div>
+
+          <div class="mb-2">
+            <label>Alias</label>
+            <input name="alias"
+                   class="form-control"
+                   value="{{ alias or '' }}">
+          </div>
+
+          <div class="mb-2">
+            <label>Cuenta madre</label>
+            <select name="id_cuenta_madre" class="form-select">
+              <option value="">— Sin madre —</option>
+              {% for c in cuentas %}
+                {% if not c[5] %}
+                <option value="{{ c[0] }}" {% if id_madre and (id_madre|string) == (c[0]|string) %}selected{% endif %}>
+                  {{ c[1] }} - {{ c[2] }}
+                </option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label>Tipo</label>
+            <select name="imputable" class="form-select">
+              <option value="true" {% if imputable is not defined or imputable %}selected{% endif %}>Imputable</option>
+              <option value="false" {% if imputable is defined and not imputable %}selected{% endif %}>Totalizadora</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-outline-danger me-auto d-none"
+                  id="btnEliminarCuenta">
+            Eliminar
+          </button>
+          <button class="btn btn-primary">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<form method="POST"
+      action=""
+      id="formEliminarCuenta"
+      class="d-none"></form>
+
+{% endblock %}
+
+{% block scripts %}
+{% if confirmar_similitud %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("formNuevaCuenta");
+    const forzarInput = form.querySelector("input[name='forzar']");
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("modalNuevaCuenta"));
+    const similarCodigo = {{ cuenta_similar.codigo | tojson }};
+    const similarDenominacion = {{ cuenta_similar.denominacion | tojson }};
+    const similitud = {{ ('%.2f'|format(cuenta_similar.similitud * 100)) | tojson }};
+    const nuevaDenominacion = {{ denominacion | tojson }};
+
+    Swal.fire({
+        icon: "warning",
+        title: "Cuenta similar encontrada",
+        html: `
+          <div class="text-start">
+            <p class="mb-2">Se encontró una cuenta parecida para este cliente:</p>
+            <p class="mb-1"><strong>Código:</strong> ${similarCodigo}</p>
+            <p class="mb-1"><strong>Denominación:</strong> ${similarDenominacion}</p>
+            <p class="mb-3"><strong>Similitud:</strong> ${similitud}%</p>
+            <p class="mb-0">La cuenta que intenta crear es <strong>${nuevaDenominacion}</strong>.</p>
+            <p class="mb-0">¿Desea crearla de todos modos?</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: "Sí, crear igual",
+        cancelButtonText: "Revisar"
+    }).then((result) => {
+        if (result.isConfirmed) {
+            forzarInput.value = "1";
+            form.submit();
+            return;
+        }
+
+        modal.show();
+    });
+});
+</script>
+{% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const modalImportar = document.getElementById("modalImportarPlan");
+    const modalElement = document.getElementById("modalNuevaCuenta");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    const form = document.getElementById("formNuevaCuenta");
+    const formEliminar = document.getElementById("formEliminarCuenta");
+    const eliminarUrlTemplate = "{{ url_for('eliminar_cuenta', id_cliente=id_cliente, id_cuenta=999999999) }}";
+    const forzarInput = form.querySelector("input[name='forzar']");
+    const titulo = document.getElementById("modalTitulo");
+    const btnEliminar = document.getElementById("btnEliminarCuenta");
+
+    function limpiarModal() {
+        form.reset();
+        form.querySelector("input[name='id_cuenta']").value = "";
+        forzarInput.value = "0";
+        titulo.innerText = "Nueva cuenta";
+        btnEliminar.classList.add("d-none");
+        delete form.dataset.cuentaId;
+        delete form.dataset.codigo;
+        delete form.dataset.denominacion;
+        delete form.dataset.imputable;
+    }
+
+    modalElement.addEventListener("hidden.bs.modal", function () {
+        {% if not confirmar_similitud %}
+        limpiarModal();
+        {% endif %}
+    });
+
+    document.querySelectorAll(".cuenta-row").forEach(row => {
+        row.addEventListener("click", function () {
+            limpiarModal();
+
+            titulo.innerText = "Editar cuenta";
+            form.querySelector("input[name='id_cuenta']").value = this.dataset.id;
+            form.querySelector("input[name='codigo']").value = this.dataset.codigo;
+            form.querySelector("input[name='denominacion']").value = this.dataset.denominacion;
+            form.querySelector("input[name='alias']").value = this.dataset.alias || "";
+            form.querySelector("select[name='imputable']").value = this.dataset.imputable;
+            form.querySelector("select[name='id_cuenta_madre']").value = this.dataset.madre;
+            form.dataset.cuentaId = this.dataset.id;
+            form.dataset.codigo = this.dataset.codigo;
+            form.dataset.denominacion = this.dataset.denominacion;
+            form.dataset.imputable = this.dataset.imputable;
+            btnEliminar.classList.remove("d-none");
+
+            modal.show();
+        });
+    });
+
+    btnEliminar.addEventListener("click", function () {
+        const cuentaId = form.dataset.cuentaId;
+        const codigo = form.dataset.codigo;
+        const denominacion = form.dataset.denominacion;
+        const tipo = form.dataset.imputable === "true" ? "imputable" : "totalizadora";
+
+        if (!cuentaId) {
+            return;
+        }
+
+        Swal.fire({
+            icon: "warning",
+            title: "Eliminar cuenta",
+            html: `
+              <div class="text-start">
+                <p class="mb-1"><strong>Código:</strong> ${codigo}</p>
+                <p class="mb-3"><strong>Denominación:</strong> ${denominacion}</p>
+                <p class="mb-0">Se eliminará una cuenta ${tipo} si no tiene movimientos asociados.</p>
+                <p class="mb-0">Si es totalizadora, además no debe tener subcuentas.</p>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#d33"
+        }).then((result) => {
+            if (!result.isConfirmed) {
+                return;
+            }
+
+            formEliminar.action = eliminarUrlTemplate.replace("999999999", cuentaId);
+            formEliminar.submit();
+        });
+    });
+
+    {% if sin_cuentas and clientes_origen %}
+    Swal.fire({
+        icon: "info",
+        title: "Plan de cuentas vacío",
+        text: "Este cliente no tiene cuentas cargadas. Puede importar el plan desde otro cliente.",
+        showCancelButton: true,
+        confirmButtonText: "Importar ahora",
+        cancelButtonText: "Después"
+    }).then((result) => {
+        if (result.isConfirmed && modalImportar) {
+            bootstrap.Modal.getOrCreateInstance(modalImportar).show();
+        }
+    });
+    {% endif %}
+});
+</script>
+{% endblock %}
