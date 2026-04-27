@@ -95,7 +95,7 @@
 
         <div class="modal-header">
           <h5 class="modal-title">Cliente</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
 
         <div class="modal-body">
@@ -173,7 +173,12 @@
             Contabilidad
           </a>
 
-          <div>
+          <div class="d-flex gap-2">
+            <button type="button"
+                    id="btnEliminarCliente"
+                    class="btn btn-outline-danger d-none">
+              Eliminar
+            </button>
             <button type="submit"
                     class="btn btn-primary">
               Guardar cambios
@@ -187,6 +192,8 @@
     </div>
   </div>
 </div>
+
+<form method="POST" id="formEliminarCliente" class="d-none"></form>
 
 {% endblock %}
 
@@ -203,7 +210,12 @@ function limpiarModalCliente() {
   document.getElementById("cliente_password").value = "";
   document.getElementById("cliente_venc").value = "";
   document.getElementById("btnContabilidad").href = "#";
+  document.getElementById("btnEliminarCliente").classList.add("d-none");
+  document.getElementById("formEliminarCliente").action = "";
 }
+
+const btnEliminarCliente = document.getElementById("btnEliminarCliente");
+const formEliminarCliente = document.getElementById("formEliminarCliente");
 
 document.querySelectorAll(".cliente-row").forEach(row => {
   row.addEventListener("click", () => {
@@ -225,10 +237,30 @@ document.querySelectorAll(".cliente-row").forEach(row => {
 
     document.getElementById("btnContabilidad").href =
       `/cliente/${idCliente}/contabilidad`;
+    btnEliminarCliente.classList.remove("d-none");
+    formEliminarCliente.action = `/cliente/${idCliente}/eliminar`;
 
     modal.show();
   });
 });
+
+if (btnEliminarCliente && formEliminarCliente) {
+  btnEliminarCliente.addEventListener("click", () => {
+    Swal.fire({
+      title: "¿Eliminar cliente?",
+      text: "Esta acción eliminará el cliente si no tiene asientos relacionados.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#d33"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        formEliminarCliente.submit();
+      }
+    });
+  });
+}
 </script>
 {% endif %}
 {% endblock %}

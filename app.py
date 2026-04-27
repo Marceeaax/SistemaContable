@@ -5,6 +5,7 @@ import psycopg2.extras
 from dotenv import load_dotenv
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import date
+import json
 
 load_dotenv()
 
@@ -18,6 +19,8 @@ DB_CONFIG = dict(
     user=os.getenv("DB_USER", "postgres"),
     password=os.getenv("DB_PASS", "")
 )
+
+TABLE_COLUMNS_CACHE = {}
 
 
 def format_amount_display(valor, moneda="GS."):
@@ -42,6 +45,137 @@ app.jinja_env.globals["format_amount_display"] = format_amount_display
 
 def get_conn():
     return psycopg2.connect(**DB_CONFIG)
+
+
+def get_current_username():
+    return (session.get("username") or "sistema").strip() or "sistema"
+
+
+def get_table_columns(table_name):
+    if table_name in TABLE_COLUMNS_CACHE:
+        return TABLE_COLUMNS_CACHE[table_name]
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = %s
+            """, (table_name,))
+            columnas = {row[0] for row in cur.fetchall()}
+
+    TABLE_COLUMNS_CACHE[table_name] = columnas
+    return columnas
+
+
+def build_insert_with_audit(table_name, data, usuario):
+    valores = dict(data)
+    columnas = get_table_columns(table_name)
+
+    if "fec_insercion" in columnas and "fec_insercion" not in valores:
+        valores["fec_insercion"] = "NOW()"
+    if "usu_insercion" in columnas and "usu_insercion" not in valores:
+        valores["usu_insercion"] = usuario
+
+    columnas_insert = []
+    placeholders = []
+    params = []
+    for columna, valor in valores.items():
+        columnas_insert.append(columna)
+        if valor == "NOW()":
+            placeholders.append("NOW()")
+        else:
+            placeholders.append("%s")
+            params.append(valor)
+
+    return columnas_insert, placeholders, params
+
+
+def build_update_with_audit(table_name, data, usuario):
+    valores = dict(data)
+    columnas = get_table_columns(table_name)
+
+    if "fec_modificacion" in columnas:
+        valores["fec_modificacion"] = "NOW()"
+    if "usu_modificacion" in columnas:
+        valores["usu_modificacion"] = usuario
+
+    asignaciones = []
+    params = []
+    for columna, valor in valores.items():
+        if valor == "NOW()":
+            asignaciones.append(f"{columna} = NOW()")
+        else:
+            asignaciones.append(f"{columna} = %s")
+            params.append(valor)
+
+    return asignaciones, params
+
+
+def fetch_row_dict(cur, table_name, where_clause, params):
+    cur.execute(
+        f"SELECT row_to_json(t) FROM (SELECT * FROM {table_name} WHERE {where_clause}) t",
+        params
+    )
+    row = cur.fetchone()
+    return row[0] if row and row[0] else None
+
+
+def compute_row_diff(before, after):
+    before = before or {}
+    after = after or {}
+    keys = sorted(set(before.keys()) | set(after.keys()))
+    inicial = {}
+    final = {}
+
+    for key in keys:
+        valor_before = before.get(key)
+        valor_after = after.get(key)
+        if valor_before != valor_after:
+            inicial[key] = valor_before
+            final[key] = valor_after
+
+    return inicial, final
+
+
+def registrar_auditoria(cur, nombre_tabla, accion, before=None, after=None, usuario=None):
+    columnas = get_table_columns("auditoria")
+    if not columnas:
+        return
+
+    usuario = usuario or get_current_username()
+    valor_inicial, valor_final = compute_row_diff(before, after)
+
+    if accion == "INSERT":
+        valor_inicial = {}
+        valor_final = after or {}
+    elif accion == "DELETE":
+        valor_inicial = before or {}
+        valor_final = {}
+
+    datos = {}
+    if "usuario" in columnas:
+        datos["usuario"] = usuario
+    if "tabla_afectada" in columnas:
+        datos["tabla_afectada"] = nombre_tabla
+    if "accion" in columnas:
+        datos["accion"] = accion
+    if "valor_inicial" in columnas:
+        datos["valor_inicial"] = psycopg2.extras.Json(valor_inicial or {})
+    if "valor_final" in columnas:
+        datos["valor_final"] = psycopg2.extras.Json(valor_final or {})
+    if "fecha_hora" in columnas:
+        datos["fecha_hora"] = "NOW()"
+
+    columnas_insert, placeholders, params = build_insert_with_audit("auditoria", datos, usuario)
+    cur.execute(
+        f"""
+        INSERT INTO auditoria ({", ".join(columnas_insert)})
+        VALUES ({", ".join(placeholders)})
+        """,
+        params
+    )
 
 
 def decimal_form(valor, default="0"):
@@ -519,6 +653,7 @@ def crear_asiento_desde_form(id_cliente, tipo_asiento, solo_si_no_existen=False)
 
     referencia = tipo_asiento if solo_si_no_existen else referencia
     tipo_asiento_db = tipo_asiento if tipo_asiento in ("COMPRA", "VENTA") else "DIARIO"
+    usuario = get_current_username()
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -546,26 +681,49 @@ def crear_asiento_desde_form(id_cliente, tipo_asiento, solo_si_no_existen=False)
                     return None, f"Ya existe el asiento número {numero_asiento_solicitado} para este cliente"
                 numero_asiento = numero_asiento_solicitado
 
-            cur.execute("""
-                INSERT INTO asiento (id_cliente, numero_asiento, fecha, descripcion, referencia, estado, tipo_asiento)
-                VALUES (%s, %s, %s, %s, %s, 'BORRADOR', %s)
+            datos_asiento = {
+                "id_cliente": id_cliente,
+                "numero_asiento": numero_asiento,
+                "fecha": fecha,
+                "descripcion": descripcion,
+                "referencia": referencia,
+                "estado": "BORRADOR",
+                "tipo_asiento": tipo_asiento_db,
+            }
+            columnas_insert, placeholders, params = build_insert_with_audit("asiento", datos_asiento, usuario)
+            cur.execute(
+                f"""
+                INSERT INTO asiento ({", ".join(columnas_insert)})
+                VALUES ({", ".join(placeholders)})
                 RETURNING id_asiento
-            """, (id_cliente, numero_asiento, fecha, descripcion, referencia, tipo_asiento_db))
+                """,
+                params
+            )
             id_asiento = cur.fetchone()[0]
+            after_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+            registrar_auditoria(cur, "asiento", "INSERT", after=after_asiento, usuario=usuario)
 
             for linea in lineas:
-                cur.execute("""
-                    INSERT INTO asiento_linea
-                    (id_asiento, id_cliente, id_cuenta, glosa, debe, haber)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    id_asiento,
-                    id_cliente,
-                    linea["id_cuenta"],
-                    linea["glosa"] or None,
-                    linea["debe"],
-                    linea["haber"],
-                ))
+                datos_linea = {
+                    "id_asiento": id_asiento,
+                    "id_cliente": id_cliente,
+                    "id_cuenta": linea["id_cuenta"],
+                    "glosa": linea["glosa"] or None,
+                    "debe": linea["debe"],
+                    "haber": linea["haber"],
+                }
+                columnas_insert, placeholders, params = build_insert_with_audit("asiento_linea", datos_linea, usuario)
+                cur.execute(
+                    f"""
+                    INSERT INTO asiento_linea ({", ".join(columnas_insert)})
+                    VALUES ({", ".join(placeholders)})
+                    RETURNING id_linea
+                    """,
+                    params
+                )
+                id_linea = cur.fetchone()[0]
+                after_linea = fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (id_linea,))
+                registrar_auditoria(cur, "asiento_linea", "INSERT", after=after_linea, usuario=usuario)
 
             conn.commit()
 
@@ -758,6 +916,7 @@ def guardar_cliente():
     contrasena_set = request.form.get("contrasena_set")
     vencimiento_raw = request.form.get("vencimiento")
     vencimiento = int(vencimiento_raw) if vencimiento_raw else None
+    usuario = get_current_username()
 
     # separar RUC y DV
     ruc_num, dv = ruc.split("-") if "-" in ruc else (ruc, None)
@@ -766,41 +925,96 @@ def guardar_cliente():
         with conn.cursor() as cur:
 
             if id_cliente:
+                before = fetch_row_dict(cur, "cliente", "id_cliente = %s", (id_cliente,))
                 # UPDATE
-                sql = """
+                datos_cliente = {
+                    "nombre": nombre,
+                    "tipo_persona": tipo_persona,
+                    "ruc": ruc_num,
+                    "dv": dv,
+                    "telefono": telefono,
+                    "correo_set": correo_set,
+                    "contrasena_set": contrasena_set,
+                    "vencimiento": vencimiento,
+                }
+                asignaciones, params = build_update_with_audit("cliente", datos_cliente, usuario)
+                cur.execute(
+                    f"""
                     UPDATE cliente
-                    SET nombre = %s,
-                        tipo_persona = %s,
-                        ruc = %s,
-                        dv = %s,
-                        telefono = %s,
-                        correo_set = %s,
-                        contrasena_set = %s,
-                        vencimiento = %s
+                    SET {", ".join(asignaciones)}
                     WHERE id_cliente = %s
-                """
-                cur.execute(sql, (
-                    nombre, tipo_persona, ruc_num, dv,
-                    telefono, correo_set, contrasena_set,
-                    vencimiento, id_cliente
-                ))
+                    """,
+                    params + [id_cliente]
+                )
+                after = fetch_row_dict(cur, "cliente", "id_cliente = %s", (id_cliente,))
+                registrar_auditoria(cur, "cliente", "UPDATE", before=before, after=after, usuario=usuario)
                 flash("Cliente actualizado correctamente", "success")
 
             else:
                 # INSERT
-                sql = """
+                datos_cliente = {
+                    "nombre": nombre,
+                    "tipo_persona": tipo_persona,
+                    "ruc": ruc_num,
+                    "dv": dv,
+                    "telefono": telefono,
+                    "correo_set": correo_set,
+                    "contrasena_set": contrasena_set,
+                    "vencimiento": vencimiento,
+                }
+                columnas_insert, placeholders, params = build_insert_with_audit("cliente", datos_cliente, usuario)
+                cur.execute(
+                    f"""
                     INSERT INTO cliente
-                    (nombre, tipo_persona, ruc, dv, telefono,
-                     correo_set, contrasena_set, vencimiento)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                """
-                cur.execute(sql, (
-                    nombre, tipo_persona, ruc_num, dv,
-                    telefono, correo_set, contrasena_set,
-                    vencimiento
-                ))
+                    ({", ".join(columnas_insert)})
+                    VALUES ({", ".join(placeholders)})
+                    RETURNING id_cliente
+                    """,
+                    params
+                )
+                nuevo_id = cur.fetchone()[0]
+                after = fetch_row_dict(cur, "cliente", "id_cliente = %s", (nuevo_id,))
+                registrar_auditoria(cur, "cliente", "INSERT", after=after, usuario=usuario)
                 flash("Cliente creado correctamente", "success")
 
+            conn.commit()
+
+    return redirect(url_for("index"))
+
+
+@app.route("/cliente/<int:id_cliente>/eliminar", methods=["POST"])
+def eliminar_cliente(id_cliente):
+    if not session.get("logged_in"):
+        flash("Debe iniciar sesión", "danger")
+        return redirect(url_for("index"))
+
+    usuario = get_current_username()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            before = fetch_row_dict(cur, "cliente", "id_cliente = %s", (id_cliente,))
+            if not before:
+                flash("Cliente no encontrado", "danger")
+                return redirect(url_for("index"))
+
+            cur.execute("""
+                SELECT 1
+                FROM asiento
+                WHERE id_cliente = %s
+                LIMIT 1
+            """, (id_cliente,))
+            if cur.fetchone():
+                flash("No se puede eliminar el cliente porque tiene asientos relacionados", "danger")
+                return redirect(url_for("index"))
+
+            cur.execute("""
+                DELETE FROM cliente
+                WHERE id_cliente = %s
+            """, (id_cliente,))
+            registrar_auditoria(cur, "cliente", "DELETE", before=before, usuario=usuario)
+            conn.commit()
+
+    flash("Cliente eliminado correctamente", "success")
     return redirect(url_for("index"))
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/plan-cuentas")
@@ -884,6 +1098,7 @@ def nueva_cuenta(id_cliente):
     imputable = request.form.get("imputable") == "true"
     id_madre = request.form.get("id_cuenta_madre") or None
     forzar = request.form.get("forzar") == "1"
+    usuario = get_current_username()
 
     if not codigo.isdigit():
         flash("El código debe ser numérico", "danger")
@@ -900,6 +1115,7 @@ def nueva_cuenta(id_cliente):
             # 🔵 MODO EDICIÓN
             # ================================
             if id_cuenta:
+                before = fetch_row_dict(cur, "cuenta_contable", "id_cliente = %s AND id_cuenta = %s", (id_cliente, id_cuenta))
 
                 # Verificar movimientos
                 cur.execute("""
@@ -963,24 +1179,25 @@ def nueva_cuenta(id_cliente):
                     categoria = 0
 
                 # UPDATE
-                cur.execute("""
+                datos_cuenta = {
+                    "codigo": codigo,
+                    "denominacion": denominacion,
+                    "alias": alias,
+                    "categoria": categoria,
+                    "imputable": imputable,
+                    "id_cuenta_madre": id_madre,
+                }
+                asignaciones, params = build_update_with_audit("cuenta_contable", datos_cuenta, usuario)
+                cur.execute(
+                    f"""
                     UPDATE cuenta_contable
-                    SET codigo=%s,
-                        denominacion=%s,
-                        alias=%s,
-                        categoria=%s,
-                        imputable=%s,
-                        id_cuenta_madre=%s
+                    SET {", ".join(asignaciones)}
                     WHERE id_cuenta=%s
-                """, (
-                    codigo,
-                    denominacion,
-                    alias,
-                    categoria,
-                    imputable,
-                    id_madre,
-                    id_cuenta
-                ))
+                    """,
+                    params + [id_cuenta]
+                )
+                after = fetch_row_dict(cur, "cuenta_contable", "id_cliente = %s AND id_cuenta = %s", (id_cliente, id_cuenta))
+                registrar_auditoria(cur, "cuenta_contable", "UPDATE", before=before, after=after, usuario=usuario)
 
                 conn.commit()
                 flash("Cuenta actualizada correctamente", "success")
@@ -1062,20 +1279,28 @@ def nueva_cuenta(id_cliente):
                 categoria = 0
 
             # INSERT
-            cur.execute("""
+            datos_cuenta = {
+                "id_cliente": id_cliente,
+                "codigo": codigo,
+                "denominacion": denominacion,
+                "alias": alias,
+                "categoria": categoria,
+                "imputable": imputable,
+                "id_cuenta_madre": id_madre,
+            }
+            columnas_insert, placeholders, params = build_insert_with_audit("cuenta_contable", datos_cuenta, usuario)
+            cur.execute(
+                f"""
                 INSERT INTO cuenta_contable
-                (id_cliente, codigo, denominacion, alias,
-                 categoria, imputable, id_cuenta_madre)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-            """, (
-                id_cliente,
-                codigo,
-                denominacion,
-                alias,
-                categoria,
-                imputable,
-                id_madre
-            ))
+                ({", ".join(columnas_insert)})
+                VALUES ({", ".join(placeholders)})
+                RETURNING id_cuenta
+                """,
+                params
+            )
+            nuevo_id = cur.fetchone()[0]
+            after = fetch_row_dict(cur, "cuenta_contable", "id_cliente = %s AND id_cuenta = %s", (id_cliente, nuevo_id))
+            registrar_auditoria(cur, "cuenta_contable", "INSERT", after=after, usuario=usuario)
 
             conn.commit()
 
@@ -1086,6 +1311,7 @@ def nueva_cuenta(id_cliente):
 @app.route("/cliente/<int:id_cliente>/plan-cuentas/importar", methods=["POST"])
 def importar_plan_cuentas(id_cliente):
     id_cliente_origen = request.form.get("id_cliente_origen", type=int)
+    usuario = get_current_username()
 
     if not id_cliente_origen or id_cliente_origen == id_cliente:
         flash("Debe seleccionar otro cliente como origen", "danger")
@@ -1144,36 +1370,33 @@ def importar_plan_cuentas(id_cliente):
 
                 nueva_madre = mapa_cuentas.get(id_cuenta_madre) if id_cuenta_madre else None
 
-                cur.execute("""
+                datos_cuenta = {
+                    "id_cliente": id_cliente,
+                    "codigo": codigo,
+                    "denominacion": denominacion,
+                    "alias": alias,
+                    "categoria": categoria,
+                    "imputable": imputable,
+                    "id_cuenta_madre": nueva_madre,
+                    "cuenta_r173": cuenta_r173,
+                    "denom_r173": denom_r173,
+                    "en_uso": en_uso,
+                }
+                columnas_insert, placeholders, params = build_insert_with_audit("cuenta_contable", datos_cuenta, usuario)
+                cur.execute(
+                    f"""
                     INSERT INTO cuenta_contable
-                    (
-                        id_cliente,
-                        codigo,
-                        denominacion,
-                        alias,
-                        categoria,
-                        imputable,
-                        id_cuenta_madre,
-                        cuenta_r173,
-                        denom_r173,
-                        en_uso
-                    )
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ({", ".join(columnas_insert)})
+                    VALUES ({", ".join(placeholders)})
                     RETURNING id_cuenta
-                """, (
-                    id_cliente,
-                    codigo,
-                    denominacion,
-                    alias,
-                    categoria,
-                    imputable,
-                    nueva_madre,
-                    cuenta_r173,
-                    denom_r173,
-                    en_uso,
-                ))
+                    """,
+                    params
+                )
 
-                mapa_cuentas[id_cuenta_origen] = cur.fetchone()[0]
+                nuevo_id = cur.fetchone()[0]
+                mapa_cuentas[id_cuenta_origen] = nuevo_id
+                after = fetch_row_dict(cur, "cuenta_contable", "id_cliente = %s AND id_cuenta = %s", (id_cliente, nuevo_id))
+                registrar_auditoria(cur, "cuenta_contable", "INSERT", after=after, usuario=usuario)
 
             conn.commit()
 
@@ -1183,9 +1406,11 @@ def importar_plan_cuentas(id_cliente):
 
 @app.route("/cliente/<int:id_cliente>/plan-cuentas/<int:id_cuenta>/eliminar", methods=["POST"])
 def eliminar_cuenta(id_cliente, id_cuenta):
+    usuario = get_current_username()
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            before = fetch_row_dict(cur, "cuenta_contable", "id_cliente = %s AND id_cuenta = %s", (id_cliente, id_cuenta))
             cur.execute("""
                 SELECT imputable
                 FROM cuenta_contable
@@ -1228,6 +1453,7 @@ def eliminar_cuenta(id_cliente, id_cuenta):
                 WHERE id_cliente = %s
                   AND id_cuenta = %s
             """, (id_cliente, id_cuenta))
+            registrar_auditoria(cur, "cuenta_contable", "DELETE", before=before, usuario=usuario)
 
             conn.commit()
 
@@ -1266,6 +1492,7 @@ def libro_iva(id_cliente):
 def guardar_libro_iva(id_cliente):
     tipo_libro = request.form.get("tipo_libro", "COMPRA").strip().upper()
     id_comprobante_iva = request.form.get("id_comprobante_iva", type=int)
+    usuario = get_current_username()
     if tipo_libro not in ("COMPRA", "VENTA"):
         return jsonify({"ok": False, "error": "Tipo de libro inválido"}), 400
 
@@ -1391,6 +1618,7 @@ def guardar_libro_iva(id_cliente):
                     raise RuntimeError("No existe la tabla libro_iva_comprobante")
 
                 if id_comprobante_iva:
+                    before_comprobante = fetch_row_dict(cur, "libro_iva_comprobante", "id_cliente = %s AND id_comprobante_iva = %s", (id_cliente, id_comprobante_iva))
                     cur.execute("""
                         SELECT id_asiento
                         FROM libro_iva_comprobante
@@ -1409,22 +1637,44 @@ def guardar_libro_iva(id_cliente):
                           AND id_asiento = %s
                     """, (id_cliente, id_asiento))
                     numero_asiento = cur.fetchone()[0]
-
+                    before_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
                     cur.execute("""
-                        UPDATE asiento
-                        SET fecha = %s,
-                            descripcion = %s,
-                            referencia = %s,
-                            tipo_asiento = %s
+                        SELECT id_linea
+                        FROM asiento_linea
                         WHERE id_cliente = %s
                           AND id_asiento = %s
-                    """, (fecha, descripcion, referencia, tipo_libro, id_cliente, id_asiento))
+                    """, (id_cliente, id_asiento))
+                    lineas_previas = [
+                        fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (row[0],))
+                        for row in cur.fetchall()
+                    ]
+
+                    datos_asiento = {
+                        "fecha": fecha,
+                        "descripcion": descripcion,
+                        "referencia": referencia,
+                        "tipo_asiento": tipo_libro,
+                    }
+                    asignaciones_asiento, params_asiento = build_update_with_audit("asiento", datos_asiento, usuario)
+                    cur.execute(
+                        f"""
+                        UPDATE asiento
+                        SET {", ".join(asignaciones_asiento)}
+                        WHERE id_cliente = %s
+                          AND id_asiento = %s
+                        """,
+                        params_asiento + [id_cliente, id_asiento]
+                    )
+                    after_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+                    registrar_auditoria(cur, "asiento", "UPDATE", before=before_asiento, after=after_asiento, usuario=usuario)
 
                     cur.execute("""
                         DELETE FROM asiento_linea
                         WHERE id_cliente = %s
                           AND id_asiento = %s
                     """, (id_cliente, id_asiento))
+                    for linea_previa in lineas_previas:
+                        registrar_auditoria(cur, "asiento_linea", "DELETE", before=linea_previa, usuario=usuario)
                 else:
                     cur.execute("""
                         SELECT COALESCE(MAX(numero_asiento), 0) + 1
@@ -1433,20 +1683,51 @@ def guardar_libro_iva(id_cliente):
                     """, (id_cliente,))
                     numero_asiento = cur.fetchone()[0]
 
-                    cur.execute("""
+                    datos_asiento = {
+                        "id_cliente": id_cliente,
+                        "numero_asiento": numero_asiento,
+                        "fecha": fecha,
+                        "descripcion": descripcion,
+                        "referencia": referencia,
+                        "estado": "BORRADOR",
+                        "tipo_asiento": tipo_libro,
+                    }
+                    columnas_asiento, placeholders_asiento, params_asiento = build_insert_with_audit("asiento", datos_asiento, usuario)
+                    cur.execute(
+                        f"""
                         INSERT INTO asiento
-                        (id_cliente, numero_asiento, fecha, descripcion, referencia, estado, tipo_asiento)
-                        VALUES (%s, %s, %s, %s, %s, 'BORRADOR', %s)
+                        ({", ".join(columnas_asiento)})
+                        VALUES ({", ".join(placeholders_asiento)})
                         RETURNING id_asiento
-                    """, (id_cliente, numero_asiento, fecha, descripcion, referencia, tipo_libro))
+                        """,
+                        params_asiento
+                    )
                     id_asiento = cur.fetchone()[0]
+                    after_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+                    registrar_auditoria(cur, "asiento", "INSERT", after=after_asiento, usuario=usuario)
 
                 for id_cuenta_linea, glosa, debe, haber in lineas:
-                    cur.execute("""
+                    datos_linea = {
+                        "id_asiento": id_asiento,
+                        "id_cliente": id_cliente,
+                        "id_cuenta": id_cuenta_linea,
+                        "glosa": glosa,
+                        "debe": debe,
+                        "haber": haber,
+                    }
+                    columnas_linea, placeholders_linea, params_linea = build_insert_with_audit("asiento_linea", datos_linea, usuario)
+                    cur.execute(
+                        f"""
                         INSERT INTO asiento_linea
-                        (id_asiento, id_cliente, id_cuenta, glosa, debe, haber)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (id_asiento, id_cliente, id_cuenta_linea, glosa, debe, haber))
+                        ({", ".join(columnas_linea)})
+                        VALUES ({", ".join(placeholders_linea)})
+                        RETURNING id_linea
+                        """,
+                        params_linea
+                    )
+                    id_linea = cur.fetchone()[0]
+                    after_linea = fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (id_linea,))
+                    registrar_auditoria(cur, "asiento_linea", "INSERT", after=after_linea, usuario=usuario)
 
                 datos_comprobante = {
                     "id_cliente": id_cliente,
@@ -1480,30 +1761,32 @@ def guardar_libro_iva(id_cliente):
                     if columna in columnas
                 }
 
-                columnas_insert = list(datos_comprobante.keys())
-                placeholders = ", ".join(["%s"] * len(columnas_insert))
-                valores_insert = [datos_comprobante[columna] for columna in columnas_insert]
                 if id_comprobante_iva:
-                    asignaciones = ", ".join(f"{columna} = %s" for columna in columnas_insert)
+                    asignaciones, params = build_update_with_audit("libro_iva_comprobante", datos_comprobante, usuario)
                     cur.execute(
                         f"""
                         UPDATE libro_iva_comprobante
-                        SET {asignaciones}
+                        SET {", ".join(asignaciones)}
                         WHERE id_cliente = %s
                           AND id_comprobante_iva = %s
                         """,
-                        valores_insert + [id_cliente, id_comprobante_iva]
+                        params + [id_cliente, id_comprobante_iva]
                     )
+                    after_comprobante = fetch_row_dict(cur, "libro_iva_comprobante", "id_cliente = %s AND id_comprobante_iva = %s", (id_cliente, id_comprobante_iva))
+                    registrar_auditoria(cur, "libro_iva_comprobante", "UPDATE", before=before_comprobante, after=after_comprobante, usuario=usuario)
                 else:
+                    columnas_insert, placeholders_lista, valores_insert = build_insert_with_audit("libro_iva_comprobante", datos_comprobante, usuario)
                     cur.execute(
                         f"""
                         INSERT INTO libro_iva_comprobante ({", ".join(columnas_insert)})
-                        VALUES ({placeholders})
+                        VALUES ({", ".join(placeholders_lista)})
                         RETURNING id_comprobante_iva
                         """,
                         valores_insert
                     )
                     id_comprobante_iva = cur.fetchone()[0]
+                    after_comprobante = fetch_row_dict(cur, "libro_iva_comprobante", "id_cliente = %s AND id_comprobante_iva = %s", (id_cliente, id_comprobante_iva))
+                    registrar_auditoria(cur, "libro_iva_comprobante", "INSERT", after=after_comprobante, usuario=usuario)
 
                 conn.commit()
     except Exception as exc:
