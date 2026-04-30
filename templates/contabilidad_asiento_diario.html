@@ -52,11 +52,12 @@
       <label>Concepto</label>
       <input type="text"
              class="diario-input diario-input-concepto"
+             id="descripcionAsiento"
              name="descripcion"
-             value="{{ 'Apertura del ejercicio 2025' if nuevo and tipo_nuevo == 'APERTURA' else (asiento_actual.descripcion if asiento_actual else '') }}"
+             value="{{ 'Apertura del ejercicio 2025' if nuevo and tipo_nuevo == 'APERTURA' else ('' if nuevo else (asiento_actual.descripcion if asiento_actual else '')) }}"
              {% if not nuevo %}readonly tabindex="-1"{% else %}required{% endif %}>
 
-      <button class="diario-help" type="button">?</button>
+      <button class="diario-help" type="button" tabindex="-1">?</button>
     </div>
 
     <div class="diario-grid-wrap">
@@ -146,7 +147,7 @@
         <select class="diario-input diario-field-moneda" id="lineaMoneda" {% if not nuevo %}disabled{% endif %}>
           <option>GS.</option>
         </select>
-        <input class="diario-input diario-field-importe text-end" id="lineaImporteOrigen" {% if not nuevo %}readonly tabindex="-1"{% endif %}>
+        <input class="diario-input diario-field-importe text-end" id="lineaImporteOrigen" tabindex="-1" {% if not nuevo %}readonly{% endif %}>
         <input class="diario-input diario-field-importe text-end" id="lineaImporte" {% if not nuevo %}readonly tabindex="-1"{% endif %}>
       </div>
 
@@ -274,6 +275,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const btnNuevoAsiento = document.getElementById("btnNuevoAsiento");
   const asientoNumeroControl = document.getElementById("asientoNumeroControl");
   const form = document.getElementById("formAsientoInline");
+  const descripcionAsiento = document.getElementById("descripcionAsiento");
   const tbody = document.getElementById("lineasAsientoBody");
   const cuenta = document.getElementById("lineaCuenta");
   const cuentaId = document.getElementById("lineaCuentaId");
@@ -311,6 +313,12 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   };
   const enfocarSiguienteCampo = (actual) => {
+    if (actual === descripcionAsiento && cuenta && !cuenta.readOnly && cuenta.tabIndex >= 0) {
+      cuenta.focus();
+      cuenta.select?.();
+      return;
+    }
+
     const campos = obtenerCamposTabulables();
     const indiceActual = campos.indexOf(actual);
     if (indiceActual === -1) return;
