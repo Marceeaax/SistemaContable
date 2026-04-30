@@ -168,10 +168,14 @@
           </a>
           <button class="diario-action-button" type="button" id="btnAgregarLinea" {% if not nuevo %}disabled{% endif %}>Agregar</button>
           <button class="diario-action-button" type="button" id="btnEliminarLinea" {% if not nuevo %}disabled{% endif %}>Eliminar</button>
+          {% if nuevo %}
           <a class="diario-action-button"
              href="{{ url_for('asiento_diario', id_cliente=id_cliente) }}">
             Anular
           </a>
+          {% else %}
+          <button class="diario-action-button" type="button" id="btnEliminarAsiento">Eliminar</button>
+          {% endif %}
           <button class="diario-action-button" type="button" disabled>Predef</button>
           <button class="diario-action-button" type="button">Imprimir</button>
           {% if nuevo %}
@@ -201,6 +205,13 @@
     {% endif %}
   </div>
 </div>
+
+{% if not nuevo and asiento_actual %}
+<form method="POST"
+      action="{{ url_for('eliminar_asiento_diario', id_cliente=id_cliente, id_asiento=asiento_actual.id_asiento) }}"
+      id="formEliminarAsiento"
+      class="d-none"></form>
+{% endif %}
 
 {% if nuevo %}
 <template id="lineaHiddenTemplate">
@@ -277,8 +288,41 @@ document.addEventListener("DOMContentLoaded", function () {
   const glosa = document.getElementById("lineaGlosa");
   const btnAgregarLinea = document.getElementById("btnAgregarLinea");
   const btnEliminarLinea = document.getElementById("btnEliminarLinea");
+  const btnEliminarAsiento = document.getElementById("btnEliminarAsiento");
+  const formEliminarAsiento = document.getElementById("formEliminarAsiento");
   const totalDebe = document.getElementById("totalDebe");
   const totalHaber = document.getElementById("totalHaber");
+  const obtenerCamposTabulables = () => {
+    const selector = [
+      "input",
+      "select",
+      "textarea",
+      "button",
+      "a[href]"
+    ].join(",");
+
+    return Array.from(document.querySelectorAll(selector)).filter((el) => {
+      if (!el.offsetParent) return false;
+      if (el.disabled) return false;
+      if (el.readOnly) return false;
+      if (el.tabIndex < 0) return false;
+      if (el.closest(".modal.show")) return false;
+      return true;
+    });
+  };
+  const enfocarSiguienteCampo = (actual) => {
+    const campos = obtenerCamposTabulables();
+    const indiceActual = campos.indexOf(actual);
+    if (indiceActual === -1) return;
+
+    const siguiente = campos[indiceActual + 1];
+    if (!siguiente) return;
+
+    siguiente.focus();
+    if (typeof siguiente.select === "function" && siguiente.tagName === "INPUT") {
+      siguiente.select();
+    }
+  };
   const formatAmount = (valor, moneda = "GS.") => {
     const numero = Number(valor || 0);
     const esGuaranies = String(moneda || "GS.").toUpperCase() === "GS.";
@@ -516,18 +560,30 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     asientoNumeroControl.addEventListener("change", abrirAsientoPorNumero);
-    asientoNumeroControl.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        abrirAsientoPorNumero();
-      }
-    });
   }
 
   if (btnNuevoAsiento) {
     btnNuevoAsiento.addEventListener("click", function (event) {
       event.preventDefault();
       window.location.href = this.dataset.url;
+    });
+  }
+
+  if (btnEliminarAsiento && formEliminarAsiento) {
+    btnEliminarAsiento.addEventListener("click", function () {
+      Swal.fire({
+        icon: "warning",
+        title: "Eliminar asiento",
+        text: "Se eliminará el asiento completo y, si proviene del libro IVA, también su comprobante relacionado.",
+        showCancelButton: true,
+        confirmButtonText: "Sí, eliminar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#d33"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          formEliminarAsiento.submit();
+        }
+      });
     });
   }
 
@@ -549,6 +605,27 @@ document.addEventListener("DOMContentLoaded", function () {
     event.preventDefault();
     window.location.href = btnNuevoAsiento.dataset.url;
   });
+
+  document.addEventListener("keydown", function (event) {
+    const target = event.target;
+    if (event.key !== "Enter" || !target) return;
+    if (target.closest(".modal.show")) return;
+    if (!(target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA")) return;
+    if (target.id === "buscarCuentaModal") return;
+    if (target.type === "submit" || target.type === "button") return;
+
+    event.preventDefault();
+    enfocarSiguienteCampo(target);
+  });
+
+  if (asientoNumeroControl) {
+    setTimeout(() => {
+      asientoNumeroControl.focus();
+      if (typeof asientoNumeroControl.select === "function") {
+        asientoNumeroControl.select();
+      }
+    }, 0);
+  }
 
   {% if mostrar_alerta_apertura %}
   Swal.fire({

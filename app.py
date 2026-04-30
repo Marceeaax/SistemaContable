@@ -901,6 +901,72 @@ def guardar_asiento_diario(id_cliente):
     return redirect(url_for("asiento_diario", id_cliente=id_cliente, id_asiento=id_asiento))
 
 
+@app.route("/cliente/<int:id_cliente>/contabilidad/asiento/<int:id_asiento>/eliminar", methods=["POST"])
+def eliminar_asiento_diario(id_cliente, id_asiento):
+    usuario = get_current_username()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            before_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+            if not before_asiento:
+                flash("Asiento no encontrado", "danger")
+                return redirect(url_for("asiento_diario", id_cliente=id_cliente))
+
+            cur.execute("""
+                SELECT id_linea
+                FROM asiento_linea
+                WHERE id_cliente = %s
+                  AND id_asiento = %s
+            """, (id_cliente, id_asiento))
+            lineas_previas = [
+                fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (row[0],))
+                for row in cur.fetchall()
+            ]
+
+            columnas_iva = get_table_columns("libro_iva_comprobante")
+            comprobantes_previos = []
+            if columnas_iva:
+                cur.execute("""
+                    SELECT id_comprobante_iva
+                    FROM libro_iva_comprobante
+                    WHERE id_cliente = %s
+                      AND id_asiento = %s
+                """, (id_cliente, id_asiento))
+                comprobantes_previos = [
+                    fetch_row_dict(cur, "libro_iva_comprobante", "id_comprobante_iva = %s", (row[0],))
+                    for row in cur.fetchall()
+                ]
+
+                cur.execute("""
+                    DELETE FROM libro_iva_comprobante
+                    WHERE id_cliente = %s
+                      AND id_asiento = %s
+                """, (id_cliente, id_asiento))
+
+                for comprobante in comprobantes_previos:
+                    registrar_auditoria(cur, "libro_iva_comprobante", "DELETE", before=comprobante, usuario=usuario)
+
+            cur.execute("""
+                DELETE FROM asiento_linea
+                WHERE id_cliente = %s
+                  AND id_asiento = %s
+            """, (id_cliente, id_asiento))
+            for linea in lineas_previas:
+                registrar_auditoria(cur, "asiento_linea", "DELETE", before=linea, usuario=usuario)
+
+            cur.execute("""
+                DELETE FROM asiento
+                WHERE id_cliente = %s
+                  AND id_asiento = %s
+            """, (id_cliente, id_asiento))
+            registrar_auditoria(cur, "asiento", "DELETE", before=before_asiento, usuario=usuario)
+
+            conn.commit()
+
+    flash("Asiento eliminado correctamente", "success")
+    return redirect(url_for("asiento_diario", id_cliente=id_cliente))
+
+
 @app.route("/cliente/guardar", methods=["POST"])
 def guardar_cliente():
     if not session.get("logged_in"):

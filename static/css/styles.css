@@ -351,6 +351,14 @@ thead.sticky-top th {
 
 .diario-input-number{
   font-weight: 800;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.diario-input-number::-webkit-outer-spin-button,
+.diario-input-number::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .diario-select-short{
