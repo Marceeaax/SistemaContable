@@ -471,6 +471,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const modalTitle = document.getElementById("modalComprobanteIvaTitle");
     const ivaBookTableBody = document.getElementById("ivaBookTableBody");
     const form = document.getElementById("formComprobanteIva");
+    const selectSigla = form ? form.querySelector("[name='sigla']") : null;
     const btnAgregarIva = document.getElementById("btnAgregarIva");
     const btnModificarIva = document.getElementById("btnModificarIva");
     const btnGuardar = document.getElementById("btnGuardarIva");
@@ -502,6 +503,39 @@ document.addEventListener("DOMContentLoaded", function () {
         { inputId: "cta_iva_5_codigo", hiddenId: "cta_iva_5_id", label: "Cuenta IVA 5%", requerido: () => parseMonto(iva5.value) > 0 },
         { inputId: "cta_iva_10_codigo", hiddenId: "cta_iva_10_id", label: "Cuenta IVA 10%", requerido: () => parseMonto(iva10.value) > 0 }
     ];
+    const obtenerCamposTabulablesModal = () => {
+        if (!form) return [];
+
+        const selector = [
+            "input",
+            "select",
+            "textarea",
+            "button"
+        ].join(",");
+
+        return Array.from(form.querySelectorAll(selector)).filter((el) => {
+            if (!el.offsetParent) return false;
+            if (el.disabled) return false;
+            if (el.readOnly) return false;
+            if (el.type === "hidden") return false;
+            if (el.type === "checkbox") return false;
+            if (el.tabIndex < 0) return false;
+            return true;
+        });
+    };
+    const enfocarSiguienteCampoModal = (actual) => {
+        const campos = obtenerCamposTabulablesModal();
+        const indiceActual = campos.indexOf(actual);
+        if (indiceActual === -1) return;
+
+        const siguiente = campos[indiceActual + 1];
+        if (!siguiente) return;
+
+        siguiente.focus();
+        if (typeof siguiente.select === "function" && siguiente.tagName === "INPUT") {
+            siguiente.select();
+        }
+    };
     let filaSeleccionada = ivaBookTableBody ? ivaBookTableBody.querySelector(".iva-book-row-selected") : null;
     let comprobanteSeleccionado = filaSeleccionada?.dataset.comprobante ? JSON.parse(filaSeleccionada.dataset.comprobante) : null;
 
@@ -886,6 +920,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 setTituloModal(false);
             }
             estadoInicial = snapshotFormulario();
+            if (selectSigla) {
+                setTimeout(() => selectSigla.focus(), 0);
+            }
         });
 
         modalElement.addEventListener("hide.bs.modal", function (event) {
@@ -971,6 +1008,19 @@ document.addEventListener("DOMContentLoaded", function () {
                 .finally(() => {
                     btnGuardar.disabled = false;
                 });
+        });
+    }
+
+    if (form) {
+        form.addEventListener("keydown", function (event) {
+            const target = event.target;
+            if (event.key !== "Enter" || !target) return;
+            if (!(target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA")) return;
+            if (target === rucCodigo || target === inputCuenta) return;
+            if (target.id === "cta_iva_5_codigo" || target.id === "cta_iva_10_codigo" || target.id === "contracuenta_codigo") return;
+
+            event.preventDefault();
+            enfocarSiguienteCampoModal(target);
         });
     }
 

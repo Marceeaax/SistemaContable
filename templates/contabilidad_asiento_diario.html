@@ -111,11 +111,11 @@
         <span>▲</span><span>▼</span>
       </div>
       <label class="diario-lines-check">
-        <input class="form-check-input" type="checkbox" checked>
+        <input class="form-check-input" type="checkbox" checked tabindex="-1">
         Líneas
       </label>
       <label class="diario-lines-check">
-        <input class="form-check-input" type="checkbox">
+        <input class="form-check-input" type="checkbox" tabindex="-1">
         Bloqueado
       </label>
       <div class="diario-total-box text-end" id="totalDebe">{{ format_amount_display(total_debe, 'GS.') if not nuevo else '0' }}</div>
@@ -307,6 +307,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!el.offsetParent) return false;
       if (el.disabled) return false;
       if (el.readOnly) return false;
+      if (el.type === "checkbox") return false;
       if (el.tabIndex < 0) return false;
       if (el.closest(".modal.show")) return false;
       return true;
@@ -574,6 +575,15 @@ document.addEventListener("DOMContentLoaded", function () {
     btnNuevoAsiento.addEventListener("click", function (event) {
       event.preventDefault();
       window.location.href = this.dataset.url;
+    });
+  }
+
+  if (descripcionAsiento && cuenta) {
+    descripcionAsiento.addEventListener("keydown", function (event) {
+      if (event.key !== "Tab" && event.key !== "Enter") return;
+      event.preventDefault();
+      cuenta.focus();
+      cuenta.select?.();
     });
   }
 
