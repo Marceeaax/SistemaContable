@@ -497,6 +497,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const totalFinal = document.getElementById("totalFinal");
     let estadoInicial = "";
     let cerrarForzado = false;
+    let rucLookupVersion = 0;
     const cuentaCampos = [
         { inputId: "cuenta_codigo", hiddenId: "cuenta_id", label: "Cuenta", requerido: () => true },
         { inputId: "contracuenta_codigo", hiddenId: "contracuenta_id", label: "Contracuenta", requerido: () => true },
@@ -753,6 +754,7 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     const limpiarFormulario = () => {
+        rucLookupVersion += 1;
         form.reset();
         limpiarErroresValidacion();
         if (idComprobanteIva) idComprobanteIva.value = "";
@@ -1153,7 +1155,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const buscarPersonaPorRuc = (q) => {
             const rucLimpio = String(q || "").trim();
-            if (!rucLimpio || !rucLimpio.startsWith("8")) {
+            if (!rucLimpio) {
                 return Promise.resolve([]);
             }
 
@@ -1164,11 +1166,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const completarRucDesdeLookup = () => {
             const q = rucCodigo.value.trim();
-            if (!q || !q.startsWith("8")) {
+            if (!q) {
+                rucLookupVersion += 1;
                 return;
             }
 
+            const versionActual = ++rucLookupVersion;
             buscarPersonaPorRuc(q).then((data) => {
+                if (versionActual !== rucLookupVersion) {
+                    return;
+                }
+                if (!modalElement?.classList.contains("show")) {
+                    return;
+                }
+                if (rucCodigo.value.trim() !== q) {
+                    return;
+                }
                 if (!Array.isArray(data) || !data.length) {
                     rucNombre.value = "";
                     return;
@@ -1181,6 +1194,7 @@ document.addEventListener("DOMContentLoaded", function () {
         };
 
         rucCodigo.addEventListener("input", function () {
+            rucLookupVersion += 1;
             rucLista.innerHTML = "";
             if (!this.value.trim()) {
                 rucNombre.value = "";

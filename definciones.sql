@@ -256,3 +256,81 @@ TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS public.cliente_tipo_contribuyente
     OWNER to postgres;
+
+
+
+CREATE OR REPLACE FUNCTION public.calcular_dv_11_a(
+    p_numero varchar,
+    p_basemax integer DEFAULT 11
+)
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_total integer := 0;
+    v_resto integer;
+    v_digit integer;
+    v_numero_al text := '';
+    v_caracter text;
+    v_ascii integer;
+    v_numero_aux integer;
+    k integer := 2;
+    i integer;
+BEGIN
+    IF p_numero IS NULL OR btrim(p_numero) = '' THEN
+        RETURN NULL;
+    END IF;
+
+    -- Convierte letras a su código ASCII, números quedan igual
+    FOR i IN 1 .. length(p_numero) LOOP
+        v_caracter := upper(substr(p_numero, i, 1));
+        v_ascii := ascii(v_caracter);
+
+        IF v_ascii BETWEEN 48 AND 57 THEN
+            v_numero_al := v_numero_al || v_caracter;
+        ELSE
+            v_numero_al := v_numero_al || v_ascii::text;
+        END IF;
+    END LOOP;
+
+    -- Cálculo del DV
+    k := 2;
+    v_total := 0;
+
+    FOR i IN REVERSE length(v_numero_al) .. 1 LOOP
+        IF k > p_basemax THEN
+            k := 2;
+        END IF;
+
+        v_numero_aux := substr(v_numero_al, i, 1)::integer;
+        v_total := v_total + (v_numero_aux * k);
+        k := k + 1;
+    END LOOP;
+
+    v_resto := mod(v_total, 11);
+
+    IF v_resto > 1 THEN
+        v_digit := 11 - v_resto;
+    ELSE
+        v_digit := 0;
+    END IF;
+
+    RETURN v_digit;
+END;
+$$;
+
+
+
+SELECT public.calcular_dv_11_a('80082322'); 
+
+select * from personas_ref where rf_numero = '1341595'
+
+select * from personas_ref 
+
+CREATE INDEX idx_personas_ref_numero_sin_guion
+ON public.personas_ref ((REPLACE(rf_numero, '-', '')));
+
+CREATE INDEX idx_personas_ref_numero_base
+ON public.personas_ref ((split_part(rf_numero, '-', 1)));
+
+select * from tipo_iva

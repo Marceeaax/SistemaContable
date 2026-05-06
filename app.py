@@ -474,10 +474,10 @@ def fetch_tipos_iva(libro):
                 SELECT id_tipo_iva, denominacion, {', '.join(select_extra)}
                 FROM tipo_iva
                 WHERE activo = true
-                  AND aplica_libro = %s
+                  AND LOWER(denominacion) LIKE %s
                 ORDER BY denominacion
             """
-            cur.execute(sql, (libro,))
+            cur.execute(sql, ("%iva discriminado%",))
             return cur.fetchall()
 
 
@@ -1947,30 +1947,41 @@ def buscar_personas_ref():
         return jsonify([])
 
     q_num = "".join(ch for ch in q if ch.isdigit())
+    q_base = q.split("-")[0].strip()
+    sql_persona = """
+        SELECT
+            rf_numero,
+            CASE
+                WHEN rf_tipo_ident = 'CI' THEN
+                    TRIM(CONCAT(COALESCE(rf_nombre, ''), ' ', COALESCE(rf_apellido, '')))
+                ELSE
+                    COALESCE(rf_nombre, '')
+            END AS nombre_completo
+        FROM personas_ref
+        WHERE {where_clause}
+        LIMIT 1
+    """
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    rf_numero,
-                    COALESCE(rf_nombre, '') AS nombre_completo
-                FROM personas_ref
-                WHERE rf_numero ILIKE %s
-                   OR REPLACE(rf_numero, '-', '') ILIKE %s
-                ORDER BY rf_numero
-                LIMIT 10
-            """, (f"{q}%", f"{q_num}%"))
-            rows = cur.fetchall()
+            cur.execute(sql_persona.format(where_clause="rf_numero = %s"), (q,))
+            row = cur.fetchone()
 
-    personas = [
-        {
-            "numero": r[0],
-            "nombre": r[1] or ""
-        }
-        for r in rows
-    ]
+            if not row and q_base:
+                cur.execute(sql_persona.format(where_clause="split_part(rf_numero, '-', 1) = %s"), (q_base,))
+                row = cur.fetchone()
 
-    return jsonify(personas)
+            if not row and q_num:
+                cur.execute(sql_persona.format(where_clause="REPLACE(rf_numero, '-', '') = %s"), (q_num,))
+                row = cur.fetchone()
+
+    if not row:
+        return jsonify([])
+
+    return jsonify([{
+        "numero": row[0],
+        "nombre": row[1] or ""
+    }])
 
 
 if __name__ == "__main__":
