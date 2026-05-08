@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="libro-mayor-page{% if print_mode %} libro-mayor-print-mode{% endif %}">
+  <div class="libro-mayor-hero card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+          <h3 class="mb-1">Libro diario</h3>
+          <p class="text-muted mb-0">
+            Cliente: <span class="fw-semibold">{{ cliente_nombre }}</span>
+            <span class="text-muted"> (ID {{ id_cliente }})</span>
+          </p>
+        </div>
+        {% if not print_mode %}
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('contabilidad_cliente', id_cliente=id_cliente) }}">Volver</a>
+          {% if pdf_enabled %}
+          <a class="btn btn-primary btn-sm"
+             target="_blank"
+             href="{{ url_for('libro_diario_reporte', id_cliente=id_cliente, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, tipo_asiento=tipo_asiento, format='pdf') }}">
+            Descargar PDF
+          </a>
+          {% endif %}
+          <a class="btn btn-outline-primary btn-sm"
+             target="_blank"
+             href="{{ url_for('libro_diario_reporte', id_cliente=id_cliente, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, tipo_asiento=tipo_asiento, print='1') }}">
+            Imprimir
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if not print_mode %}
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">Fecha desde</label>
+          <input type="date" class="form-control" name="fecha_desde" value="{{ fecha_desde }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Fecha hasta</label>
+          <input type="date" class="form-control" name="fecha_hasta" value="{{ fecha_hasta }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Tipo de asiento</label>
+          <select class="form-select" name="tipo_asiento">
+            {% for tipo in ['TODOS', 'APERTURA', 'DIARIO', 'COMPRA', 'VENTA'] %}
+            <option value="{{ tipo }}" {% if tipo_asiento == tipo %}selected{% endif %}>
+              {{ 'Todos' if tipo == 'TODOS' else tipo.title() }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100">Ver libro diario</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if errores %}
+  <div class="alert alert-danger">
+    {% for error in errores %}
+    <div>{{ error }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not errores %}
+  {% if not pdf_enabled and not print_mode %}
+  <div class="alert alert-info">
+    Para descargar PDF real instalá <code>weasyprint</code>. Mientras tanto podés usar <strong>Imprimir</strong> y guardar como PDF desde el navegador.
+  </div>
+  {% endif %}
+
+  <div class="libro-mayor-summary row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Asientos</div>
+          <div class="fs-4 fw-semibold">{{ resumen.asientos }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Líneas</div>
+          <div class="fs-4 fw-semibold">{{ resumen.lineas }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Total débitos</div>
+          <div class="fs-5 fw-semibold">{{ format_amount_display(resumen.total_debe, 'GS.') }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Total créditos</div>
+          <div class="fs-5 fw-semibold">{{ format_amount_display(resumen.total_haber, 'GS.') }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if asientos %}
+  <div class="libro-mayor-stack">
+    {% for asiento in asientos %}
+    <section class="libro-mayor-card card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="libro-mayor-card-head">
+          <div>
+            <div class="libro-mayor-codigo">Asiento {{ asiento.numero_asiento or asiento.id_asiento }}</div>
+            <h5 class="mb-1">{{ asiento.descripcion or 'Sin concepto' }}</h5>
+            <div class="text-muted small">
+              {{ asiento.fecha.strftime('%d/%m/%Y') if asiento.fecha else '' }}
+              {% if asiento.referencia %} · {{ asiento.referencia }}{% endif %}
+              {% if asiento.tipo_asiento %} · {{ asiento.tipo_asiento }}{% endif %}
+              {% if asiento.es_libro_iva %} · Originado en libro IVA{% endif %}
+            </div>
+          </div>
+          <div class="libro-mayor-mini-summary">
+            <div><span>Estado</span><strong>{{ asiento.estado or '—' }}</strong></div>
+            <div><span>Débitos</span><strong>{{ format_amount_display(asiento.total_debe, 'GS.') }}</strong></div>
+            <div><span>Créditos</span><strong>{{ format_amount_display(asiento.total_haber, 'GS.') }}</strong></div>
+          </div>
+        </div>
+
+        <div class="table-scroll libro-mayor-table-wrap">
+          <table class="table table-sm align-middle mb-0 libro-mayor-table">
+            <thead class="sticky-top table-light">
+              <tr>
+                <th style="width: 120px;">Cuenta</th>
+                <th>Denominación</th>
+                <th>Detalle</th>
+                <th style="width: 130px;" class="text-end">Débito GS.</th>
+                <th style="width: 130px;" class="text-end">Crédito GS.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for linea in asiento.lineas %}
+              <tr>
+                <td class="fw-semibold">{{ linea.codigo }}</td>
+                <td>
+                  {{ linea.denominacion }}
+                  {% if linea.es_libro_iva %}<span class="libro-mayor-badge">IVA</span>{% endif %}
+                </td>
+                <td>{{ linea.glosa or '' }}</td>
+                <td class="text-end">{{ format_amount_display(linea.debe, 'GS.') if linea.debe else '' }}</td>
+                <td class="text-end">{{ format_amount_display(linea.haber, 'GS.') if linea.haber else '' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="3">Totales del asiento</th>
+                <th class="text-end">{{ format_amount_display(asiento.total_debe, 'GS.') }}</th>
+                <th class="text-end">{{ format_amount_display(asiento.total_haber, 'GS.') }}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card shadow-sm">
+    <div class="card-body text-muted">
+      No hay asientos para el criterio seleccionado.
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if print_mode %}
+<script>
+window.addEventListener("load", function () {
+  setTimeout(function () {
+    window.print();
+  }, 250);
+});
+</script>
+{% endif %}
+{% endblock %}

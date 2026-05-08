@@ -42,4 +42,10 @@ ALTER TABLE public.libro_iva_comprobante
     ADD COLUMN IF NOT EXISTS fec_modificacion timestamp without time zone,
     ADD COLUMN IF NOT EXISTS usu_modificacion varchar(120);
 
+ALTER TABLE public.personas_ref
+    ADD COLUMN IF NOT EXISTS fec_insercion timestamp without time zone,
+    ADD COLUMN IF NOT EXISTS usu_insercion varchar(120),
+    ADD COLUMN IF NOT EXISTS fec_modificacion timestamp without time zone,
+    ADD COLUMN IF NOT EXISTS usu_modificacion varchar(120);
+
 COMMIT;

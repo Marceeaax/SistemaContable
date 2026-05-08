@@ -307,7 +307,7 @@
               </div>
               <div class="iva-modal-label iva-modal-label-inline">Fecha</div>
               <div class="iva-modal-top-date">
-                <input type="date" class="form-control form-control-sm" name="fecha" value="2025-01-03">
+                <input type="date" class="form-control form-control-sm iva-date-input" name="fecha" value="2025-01-03">
               </div>
             </div>
 
@@ -460,6 +460,112 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalAccionPersonaRef" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content iva-modal-content">
+      <div class="modal-header iva-modal-header">
+        <h5 class="modal-title">Cliente del comprobante</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">¿Qué querés hacer con este RUC/CI?</p>
+        <div class="mb-2">
+          <label class="form-label">Número</label>
+          <input class="form-control form-control-sm" id="accionPersonaNumero" readonly tabindex="-1">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btnAccionCrearPersona">Crear cliente</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnAccionModificarPersona">Modificar cliente</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalAltaPersonaRef" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content iva-modal-content">
+      <div class="modal-header iva-modal-header">
+        <h5 class="modal-title">Crear cliente para comprobante</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <form id="formAltaPersonaRef">
+          <div class="mb-2">
+            <label class="form-label">Número</label>
+            <input class="form-control form-control-sm" id="altaPersonaNumero" name="numero" readonly tabindex="-1">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Tipo</label>
+            <select class="form-select form-select-sm" id="altaPersonaTipo" name="tipo_registro">
+              <option value="RUC">Empresa (RUC)</option>
+              <option value="CI">Persona (CI)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Nombre</label>
+            <input class="form-control form-control-sm" id="altaPersonaNombre" name="nombre" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Apellido</label>
+            <input class="form-control form-control-sm" id="altaPersonaApellido" name="apellido">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Fecha de nacimiento</label>
+            <input class="form-control form-control-sm" id="altaPersonaFechaNac" name="fecha_nac" type="date">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnGuardarPersonaRef">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalEditarPersonaRef" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content iva-modal-content">
+      <div class="modal-header iva-modal-header">
+        <h5 class="modal-title">Modificar cliente para comprobante</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <form id="formEditarPersonaRef">
+          <input type="hidden" id="editarPersonaTipoIdent" name="tipo_ident">
+          <input type="hidden" id="editarPersonaPaisSwift" name="pais_swift">
+          <div class="mb-2">
+            <label class="form-label">Número</label>
+            <input class="form-control form-control-sm" id="editarPersonaNumero" name="numero" readonly tabindex="-1">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Tipo</label>
+            <input class="form-control form-control-sm" id="editarPersonaTipoLabel" readonly tabindex="-1">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Nombre</label>
+            <input class="form-control form-control-sm" id="editarPersonaNombre" name="nombre" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Apellido</label>
+            <input class="form-control form-control-sm" id="editarPersonaApellido" readonly tabindex="-1">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Fecha de nacimiento</label>
+            <input class="form-control form-control-sm" id="editarPersonaFechaNac" readonly tabindex="-1">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnGuardarEdicionPersonaRef">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -468,6 +574,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const filtroTipo = document.getElementById("filtroTipo");
     const modalElement = document.getElementById("modalComprobanteIva");
     const modal = modalElement ? bootstrap.Modal.getOrCreateInstance(modalElement) : null;
+    const modalAccionPersonaElement = document.getElementById("modalAccionPersonaRef");
+    const modalAccionPersona = modalAccionPersonaElement ? bootstrap.Modal.getOrCreateInstance(modalAccionPersonaElement) : null;
+    const modalAltaPersonaElement = document.getElementById("modalAltaPersonaRef");
+    const modalAltaPersona = modalAltaPersonaElement ? bootstrap.Modal.getOrCreateInstance(modalAltaPersonaElement) : null;
+    const modalEditarPersonaElement = document.getElementById("modalEditarPersonaRef");
+    const modalEditarPersona = modalEditarPersonaElement ? bootstrap.Modal.getOrCreateInstance(modalEditarPersonaElement) : null;
     const modalTitle = document.getElementById("modalComprobanteIvaTitle");
     const ivaBookTableBody = document.getElementById("ivaBookTableBody");
     const form = document.getElementById("formComprobanteIva");
@@ -488,6 +600,25 @@ document.addEventListener("DOMContentLoaded", function () {
     const rucCodigo = document.getElementById("ruc_codigo");
     const rucNombre = document.getElementById("ruc_nombre");
     const rucLista = document.getElementById("ruc_lista");
+    const accionPersonaNumero = document.getElementById("accionPersonaNumero");
+    const btnAccionCrearPersona = document.getElementById("btnAccionCrearPersona");
+    const btnAccionModificarPersona = document.getElementById("btnAccionModificarPersona");
+    const formAltaPersonaRef = document.getElementById("formAltaPersonaRef");
+    const altaPersonaNumero = document.getElementById("altaPersonaNumero");
+    const altaPersonaTipo = document.getElementById("altaPersonaTipo");
+    const altaPersonaNombre = document.getElementById("altaPersonaNombre");
+    const altaPersonaApellido = document.getElementById("altaPersonaApellido");
+    const altaPersonaFechaNac = document.getElementById("altaPersonaFechaNac");
+    const btnGuardarPersonaRef = document.getElementById("btnGuardarPersonaRef");
+    const formEditarPersonaRef = document.getElementById("formEditarPersonaRef");
+    const editarPersonaTipoIdent = document.getElementById("editarPersonaTipoIdent");
+    const editarPersonaPaisSwift = document.getElementById("editarPersonaPaisSwift");
+    const editarPersonaNumero = document.getElementById("editarPersonaNumero");
+    const editarPersonaTipoLabel = document.getElementById("editarPersonaTipoLabel");
+    const editarPersonaNombre = document.getElementById("editarPersonaNombre");
+    const editarPersonaApellido = document.getElementById("editarPersonaApellido");
+    const editarPersonaFechaNac = document.getElementById("editarPersonaFechaNac");
+    const btnGuardarEdicionPersonaRef = document.getElementById("btnGuardarEdicionPersonaRef");
     const exento = document.getElementById("exento");
     const gravado5 = document.getElementById("gravado5");
     const gravado10 = document.getElementById("gravado10");
@@ -498,6 +629,8 @@ document.addEventListener("DOMContentLoaded", function () {
     let estadoInicial = "";
     let cerrarForzado = false;
     let rucLookupVersion = 0;
+    let rucPendienteAlta = "";
+    let personaRefActual = null;
     const cuentaCampos = [
         { inputId: "cuenta_codigo", hiddenId: "cuenta_id", label: "Cuenta", requerido: () => true },
         { inputId: "contracuenta_codigo", hiddenId: "contracuenta_id", label: "Contracuenta", requerido: () => true },
@@ -567,6 +700,84 @@ document.addEventListener("DOMContentLoaded", function () {
             return Math.round(numero);
         }
         return Number(numero.toFixed(2));
+    };
+    const detectarTipoPersonaRef = (numero) => {
+        const base = String(numero || "").split("-")[0].replace(/\D/g, "");
+        return base && base.length <= 7 ? "CI" : "RUC";
+    };
+    const buscarDetallePersonaRef = (q) => {
+        const valor = String(q || "").trim();
+        if (!valor) {
+            return Promise.resolve(null);
+        }
+
+        return fetch(`{{ url_for('buscar_persona_ref_detalle') }}?q=${encodeURIComponent(valor)}`)
+            .then(async (response) => {
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.error || "Cliente no encontrado.");
+                }
+                return data.persona || null;
+            });
+    };
+    const aplicarTipoAltaPersona = () => {
+        if (!altaPersonaTipo || !altaPersonaApellido || !altaPersonaFechaNac) return;
+
+        const esPersonaFisica = altaPersonaTipo.value === "CI";
+        altaPersonaApellido.disabled = !esPersonaFisica;
+        altaPersonaApellido.tabIndex = esPersonaFisica ? 0 : -1;
+        altaPersonaFechaNac.disabled = !esPersonaFisica;
+        altaPersonaFechaNac.tabIndex = esPersonaFisica ? 0 : -1;
+
+        if (!esPersonaFisica) {
+            altaPersonaApellido.value = "";
+            altaPersonaFechaNac.value = "";
+        }
+    };
+    const abrirAltaPersonaRef = (numero) => {
+        rucPendienteAlta = numero;
+        if (altaPersonaNumero) altaPersonaNumero.value = numero;
+        if (altaPersonaNombre) altaPersonaNombre.value = "";
+        if (altaPersonaApellido) altaPersonaApellido.value = "";
+        if (altaPersonaFechaNac) altaPersonaFechaNac.value = "";
+        if (altaPersonaTipo) {
+            altaPersonaTipo.value = detectarTipoPersonaRef(numero);
+        }
+        aplicarTipoAltaPersona();
+        if (modalAltaPersona) {
+            modalAltaPersona.show();
+            setTimeout(() => altaPersonaNombre?.focus(), 0);
+        }
+    };
+    const abrirAccionPersonaRef = () => {
+        const numero = rucCodigo?.value.trim() || "";
+        if (!numero) {
+            Swal.fire("Dato requerido", "Primero debés ingresar el RUC o la CI.", "warning");
+            rucCodigo?.focus();
+            return;
+        }
+
+        if (accionPersonaNumero) {
+            accionPersonaNumero.value = numero;
+        }
+        modalAccionPersona?.show();
+    };
+    const abrirEdicionPersonaRef = (persona) => {
+        personaRefActual = persona || null;
+        if (!personaRefActual) {
+            return;
+        }
+
+        if (editarPersonaTipoIdent) editarPersonaTipoIdent.value = personaRefActual.tipo_ident || "";
+        if (editarPersonaPaisSwift) editarPersonaPaisSwift.value = personaRefActual.pais_swift || "PY";
+        if (editarPersonaNumero) editarPersonaNumero.value = personaRefActual.numero || "";
+        if (editarPersonaTipoLabel) editarPersonaTipoLabel.value = personaRefActual.tipo_ident === "CI" ? "Persona (CI)" : "Empresa (RUC)";
+        if (editarPersonaNombre) editarPersonaNombre.value = personaRefActual.nombre || "";
+        if (editarPersonaApellido) editarPersonaApellido.value = personaRefActual.apellido || "";
+        if (editarPersonaFechaNac) editarPersonaFechaNac.value = personaRefActual.fecha_nac || "";
+
+        modalEditarPersona?.show();
+        setTimeout(() => editarPersonaNombre?.focus(), 0);
     };
     const formatoGs = (valor) => {
         const numero = Number(valor || 0);
@@ -1016,7 +1227,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (form) {
         form.addEventListener("keydown", function (event) {
             const target = event.target;
-            if (event.key !== "Enter" || !target) return;
+            if (!target) return;
+            if (event.key === "Tab" && target.tagName === "INPUT" && target.type === "date" && !event.shiftKey) {
+                event.preventDefault();
+                enfocarSiguienteCampoModal(target);
+                return;
+            }
+            if (event.key !== "Enter") return;
             if (!(target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA")) return;
             if (target === rucCodigo || target === inputCuenta) return;
             if (target.id === "cta_iva_5_codigo" || target.id === "cta_iva_10_codigo" || target.id === "contracuenta_codigo") return;
@@ -1184,6 +1401,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
                 if (!Array.isArray(data) || !data.length) {
                     rucNombre.value = "";
+                    abrirAltaPersonaRef(q);
                     return;
                 }
 
@@ -1207,6 +1425,11 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         rucCodigo.addEventListener("keydown", function (event) {
+            if (event.key === "F2") {
+                event.preventDefault();
+                abrirAccionPersonaRef();
+                return;
+            }
             if (event.key === "Tab" || event.key === "Enter") {
                 completarRucDesdeLookup();
             }
@@ -1241,6 +1464,157 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     calcular();
+
+    if (altaPersonaTipo) {
+        altaPersonaTipo.addEventListener("change", aplicarTipoAltaPersona);
+        aplicarTipoAltaPersona();
+    }
+
+    if (btnGuardarPersonaRef && formAltaPersonaRef) {
+        btnGuardarPersonaRef.addEventListener("click", function () {
+            if (!altaPersonaNumero?.value.trim()) {
+                return;
+            }
+            if (!altaPersonaNombre?.value.trim()) {
+                Swal.fire("Dato requerido", "Debe ingresar el nombre.", "warning");
+                altaPersonaNombre?.focus();
+                return;
+            }
+
+            btnGuardarPersonaRef.disabled = true;
+            fetch("{{ url_for('crear_persona_ref') }}", {
+                method: "POST",
+                body: new FormData(formAltaPersonaRef)
+            })
+                .then(async (response) => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        throw new Error(data.error || "No se pudo crear el cliente.");
+                    }
+                    return data;
+                })
+                .then((data) => {
+                    if (rucCodigo && rucPendienteAlta) {
+                        rucCodigo.value = data.persona.numero || rucPendienteAlta;
+                    }
+                    if (rucNombre) {
+                        rucNombre.value = data.persona.nombre || "";
+                    }
+                    rucPendienteAlta = "";
+                    modalAltaPersona?.hide();
+                    Swal.fire({
+                        icon: "success",
+                        title: data.ya_existia ? "Cliente ya existente" : "Cliente creado",
+                        timer: 1200,
+                        showConfirmButton: false
+                    }).then(() => {
+                        inputCuenta?.focus();
+                    });
+                })
+                .catch((error) => {
+                    Swal.fire("Error", error.message, "error");
+                })
+                .finally(() => {
+                    btnGuardarPersonaRef.disabled = false;
+                });
+        });
+    }
+
+    if (btnAccionCrearPersona) {
+        btnAccionCrearPersona.addEventListener("click", function () {
+            const numero = rucCodigo?.value.trim() || accionPersonaNumero?.value.trim() || "";
+            modalAccionPersona?.hide();
+            abrirAltaPersonaRef(numero);
+        });
+    }
+
+    if (btnAccionModificarPersona) {
+        btnAccionModificarPersona.addEventListener("click", function () {
+            const numero = rucCodigo?.value.trim() || accionPersonaNumero?.value.trim() || "";
+            if (!numero) {
+                Swal.fire("Dato requerido", "Primero debés ingresar el RUC o la CI.", "warning");
+                return;
+            }
+
+            btnAccionModificarPersona.disabled = true;
+            buscarDetallePersonaRef(numero)
+                .then((persona) => {
+                    modalAccionPersona?.hide();
+                    abrirEdicionPersonaRef(persona);
+                })
+                .catch((error) => {
+                    Swal.fire("Cliente no encontrado", error.message, "warning");
+                })
+                .finally(() => {
+                    btnAccionModificarPersona.disabled = false;
+                });
+        });
+    }
+
+    if (btnGuardarEdicionPersonaRef && formEditarPersonaRef) {
+        btnGuardarEdicionPersonaRef.addEventListener("click", function () {
+            if (!editarPersonaNombre?.value.trim()) {
+                Swal.fire("Dato requerido", "Debe ingresar el nombre.", "warning");
+                editarPersonaNombre?.focus();
+                return;
+            }
+
+            btnGuardarEdicionPersonaRef.disabled = true;
+            fetch("{{ url_for('actualizar_persona_ref') }}", {
+                method: "POST",
+                body: new FormData(formEditarPersonaRef)
+            })
+                .then(async (response) => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        throw new Error(data.error || "No se pudo actualizar el cliente.");
+                    }
+                    return data;
+                })
+                .then((data) => {
+                    personaRefActual = data.persona || null;
+                    if (rucCodigo) {
+                        rucCodigo.value = data.persona.numero || rucCodigo.value;
+                    }
+                    if (rucNombre) {
+                        rucNombre.value = data.persona.nombre_completo || data.persona.nombre || "";
+                    }
+                    modalEditarPersona?.hide();
+                    Swal.fire({
+                        icon: "success",
+                        title: "Cliente actualizado",
+                        timer: 1200,
+                        showConfirmButton: false
+                    }).then(() => {
+                        rucCodigo?.focus();
+                    });
+                })
+                .catch((error) => {
+                    Swal.fire("Error", error.message, "error");
+                })
+                .finally(() => {
+                    btnGuardarEdicionPersonaRef.disabled = false;
+                });
+        });
+    }
+
+    if (modalAltaPersonaElement) {
+        modalAltaPersonaElement.addEventListener("hidden.bs.modal", function () {
+            if (formAltaPersonaRef) {
+                formAltaPersonaRef.reset();
+            }
+            aplicarTipoAltaPersona();
+        });
+    }
+
+    if (modalEditarPersonaElement) {
+        modalEditarPersonaElement.addEventListener("hidden.bs.modal", function () {
+            personaRefActual = null;
+            if (formEditarPersonaRef) {
+                formEditarPersonaRef.reset();
+            }
+        });
+    }
 
     {% if nuevo %}
     modal.show();

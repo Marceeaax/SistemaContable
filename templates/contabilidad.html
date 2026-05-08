@@ -72,10 +72,22 @@
     <li>
       <span>Informes</span>
       <ul class="submenu">
-        <li><a class="submenu-link" href="#">Libro diario</a></li>
-        <li><a class="submenu-link" href="#">Libro mayor</a></li>
+        <li>
+          <a class="submenu-link" href="{{ url_for('libro_diario_reporte', id_cliente=id_cliente) }}">
+            Libro diario
+          </a>
+        </li>
+        <li>
+          <a class="submenu-link" href="{{ url_for('libro_mayor', id_cliente=id_cliente) }}">
+            Libro mayor
+          </a>
+        </li>
         <li><a class="submenu-link" href="#">Libro inventario</a></li>
-        <li><a class="submenu-link" href="#">Libros de compras y ventas</a></li>
+        <li>
+          <a class="submenu-link" href="{{ url_for('libros_compras_ventas', id_cliente=id_cliente) }}">
+            Libros de compras y ventas
+          </a>
+        </li>
         <li><a class="submenu-link" href="#">Resumen de comprobantes por RUC</a></li>
         <li class="divider"></li>
         <li><a class="submenu-link" href="#">Balance de comprobación / sumas y saldos</a></li>

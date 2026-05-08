@@ -1,11 +1,28 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from io import BytesIO
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import date
 import json
+
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except Exception:
+    HTML = None
+    WEASYPRINT_AVAILABLE = False
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    OPENPYXL_AVAILABLE = True
+except Exception:
+    Workbook = None
+    Font = None
+    OPENPYXL_AVAILABLE = False
 
 load_dotenv()
 
@@ -41,10 +58,139 @@ def format_amount_display(valor, moneda="GS."):
 
 
 app.jinja_env.globals["format_amount_display"] = format_amount_display
+app.jinja_env.globals["pdf_enabled"] = WEASYPRINT_AVAILABLE
+app.jinja_env.globals["excel_enabled"] = OPENPYXL_AVAILABLE
 
 
 def get_conn():
     return psycopg2.connect(**DB_CONFIG)
+
+
+def build_pdf_response(template_name, filename, **context):
+    if not WEASYPRINT_AVAILABLE:
+        raise RuntimeError("PDF no disponible")
+
+    html = render_template(template_name, **context)
+    pdf = HTML(string=html, base_url=app.root_path).write_pdf()
+    response = make_response(pdf)
+    response.headers["Content-Type"] = "application/pdf"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def build_excel_response_libro_mayor(filename, libro):
+    if not OPENPYXL_AVAILABLE:
+        raise RuntimeError("Excel no disponible")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Libro Mayor"
+
+    headers = ["Fecha", "Asiento", "Cuenta", "Detalle", "Debito", "Credito", "Saldo"]
+    ws.append(headers)
+
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+
+    for cuenta in libro:
+        for mov in cuenta["movimientos"]:
+            detalle = mov["descripcion"] or ""
+            if mov.get("glosa"):
+                detalle = f"{detalle} - {mov['glosa']}" if detalle else mov["glosa"]
+
+            ws.append([
+                mov["fecha"].strftime("%d/%m/%Y") if mov.get("fecha") else "",
+                mov.get("numero_asiento") or "",
+                f"{cuenta['codigo']} - {cuenta['denominacion']}",
+                detalle,
+                float(mov.get("debe") or 0),
+                float(mov.get("haber") or 0),
+                float(mov.get("saldo") or 0),
+            ])
+
+    widths = {
+        "A": 14,
+        "B": 10,
+        "C": 34,
+        "D": 56,
+        "E": 16,
+        "F": 16,
+        "G": 16,
+    }
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
+
+    for row in ws.iter_rows(min_row=2, min_col=5, max_col=7):
+        for cell in row:
+            cell.number_format = '#,##0'
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def build_excel_response_libro_compras_ventas(filename, tipo_libro, filas):
+    if not OPENPYXL_AVAILABLE:
+        raise RuntimeError("Excel no disponible")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Libro Compras" if tipo_libro == "COMPRA" else "Libro Ventas"
+
+    headers = ["Comprobante", "Fecha", "Nombre o razón social", "RUC / CI", "Exentas", "Gravadas 5%", "Gravadas 10%", "I.V.A. 5%", "I.V.A. 10%", "Total"]
+    ws.append(headers)
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+
+    for row in filas:
+        comprobante = f"{row.get('documento_codigo') or ''}-{row.get('numero_comprobante') or ''}".strip("-")
+        ws.append([
+            comprobante,
+            row["fecha"].strftime("%d/%m/%Y") if row.get("fecha") else "",
+            row.get("razon_social") or "",
+            row.get("ruc") or "",
+            float(row.get("exento") or 0),
+            float(row.get("gravado_5") or 0),
+            float(row.get("gravado_10") or 0),
+            float(row.get("iva_5") or 0),
+            float(row.get("iva_10") or 0),
+            float(row.get("total") or 0),
+        ])
+
+    widths = {
+        "A": 24,
+        "B": 14,
+        "C": 34,
+        "D": 18,
+        "E": 14,
+        "F": 14,
+        "G": 14,
+        "H": 14,
+        "I": 14,
+        "J": 14,
+    }
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
+
+    for row in ws.iter_rows(min_row=2, min_col=5, max_col=10):
+        for cell in row:
+            cell.number_format = '#,##0'
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 def get_current_username():
@@ -266,6 +412,63 @@ def fetch_personas_ref_por_nombre_apellido(nombre="", apellido=""):
             return cur.fetchall()
 
 
+def fetch_persona_ref_ident(tipo_ident, numero, pais_swift="PY"):
+    sql = """
+        SELECT
+            rf_tipo_ident,
+            rf_numero,
+            rf_pais_swift,
+            COALESCE(rf_nombre, '') AS rf_nombre,
+            COALESCE(rf_apellido, '') AS rf_apellido,
+            rf_fecha_nac
+        FROM personas_ref
+        WHERE rf_tipo_ident = %s
+          AND rf_numero = %s
+          AND rf_pais_swift = %s
+        LIMIT 1
+    """
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (tipo_ident, numero, pais_swift))
+            return cur.fetchone()
+
+
+def fetch_persona_ref_por_query(q):
+    q = (q or "").strip()
+    if not q:
+        return None
+
+    q_num = "".join(ch for ch in q if ch.isdigit())
+    q_base = q.split("-")[0].strip()
+    sql_persona = """
+        SELECT
+            rf_tipo_ident,
+            rf_numero,
+            rf_pais_swift,
+            COALESCE(rf_nombre, '') AS rf_nombre,
+            COALESCE(rf_apellido, '') AS rf_apellido,
+            rf_fecha_nac
+        FROM personas_ref
+        WHERE {where_clause}
+        LIMIT 1
+    """
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql_persona.format(where_clause="rf_numero = %s"), (q,))
+            row = cur.fetchone()
+
+            if not row and q_base:
+                cur.execute(sql_persona.format(where_clause="split_part(rf_numero, '-', 1) = %s"), (q_base,))
+                row = cur.fetchone()
+
+            if not row and q_num:
+                cur.execute(sql_persona.format(where_clause="REPLACE(rf_numero, '-', '') = %s"), (q_num,))
+                row = cur.fetchone()
+
+            return row
+
+
 def fetch_clientes_con_plan(excluir_id_cliente):
     sql = """
         SELECT
@@ -295,6 +498,17 @@ def fetch_cliente_nombre(id_cliente):
             )
             row = cur.fetchone()
     return row[0] if row else f"Cliente #{id_cliente}"
+
+
+def fetch_cliente_basico(id_cliente):
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id_cliente, nombre, ruc, dv
+                FROM cliente
+                WHERE id_cliente = %s
+            """, (id_cliente,))
+            return cur.fetchone()
 
 
 def fetch_asientos_cliente(id_cliente):
@@ -556,6 +770,308 @@ def fetch_libro_iva_comprobantes(id_cliente, tipo_libro):
             return cur.fetchall()
 
 
+def fetch_libro_compras_ventas(id_cliente, tipo_libro, fecha_desde=None, fecha_hasta=None):
+    tipo_iva_objetivo = 1 if tipo_libro == "COMPRA" else 4
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = 'libro_iva_comprobante'
+            """)
+            if not cur.fetchone():
+                return []
+
+        filtros = [
+            "lic.id_cliente = %s",
+            "lic.id_tipo_iva = %s",
+        ]
+        params = [id_cliente, tipo_iva_objetivo]
+
+        if fecha_desde:
+            filtros.append("lic.fecha >= %s")
+            params.append(fecha_desde)
+
+        if fecha_hasta:
+            filtros.append("lic.fecha <= %s")
+            params.append(fecha_hasta)
+
+        sql = f"""
+            SELECT
+                lic.id_comprobante_iva,
+                lic.id_asiento,
+                a.numero_asiento,
+                lic.fecha,
+                lic.condicion,
+                td.codigo AS documento_codigo,
+                td.descripcion AS documento_descripcion,
+                lic.numero_comprobante,
+                lic.ruc,
+                lic.razon_social,
+                lic.exento,
+                lic.gravado_5,
+                lic.iva_5,
+                lic.gravado_10,
+                lic.iva_10,
+                lic.total,
+                lic.moneda,
+                lic.tipo_cambio,
+                ti.denominacion AS tipo_iva_denominacion
+            FROM libro_iva_comprobante lic
+            JOIN asiento a
+              ON a.id_asiento = lic.id_asiento
+             AND a.id_cliente = lic.id_cliente
+            LEFT JOIN tipo_documento td
+              ON td.id_tipo_documento = lic.id_tipo_documento
+            LEFT JOIN tipo_iva ti
+              ON ti.id_tipo_iva = lic.id_tipo_iva
+            WHERE {' AND '.join(filtros)}
+            ORDER BY lic.fecha, a.numero_asiento, lic.id_comprobante_iva
+        """
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return cur.fetchall()
+
+
+def fetch_libro_mayor(id_cliente, fecha_desde=None, fecha_hasta=None, id_cuenta=None, solo_con_movimiento=True):
+    filtros_cuentas = [
+        "cc.id_cliente = %s",
+        "cc.imputable = true",
+        "COALESCE(cc.en_uso, true) = true",
+    ]
+    params_cuentas = [id_cliente]
+
+    if id_cuenta:
+        filtros_cuentas.append("cc.id_cuenta = %s")
+        params_cuentas.append(id_cuenta)
+
+    sql_cuentas = f"""
+        SELECT cc.id_cuenta, cc.codigo, cc.denominacion
+        FROM cuenta_contable cc
+        WHERE {' AND '.join(filtros_cuentas)}
+        ORDER BY cc.codigo
+    """
+
+    filtros_previos = ["al.id_cliente = %s"]
+    params_previos = [id_cliente]
+    filtros_mov = ["al.id_cliente = %s"]
+    params_mov = [id_cliente]
+
+    if id_cuenta:
+        filtros_previos.append("al.id_cuenta = %s")
+        params_previos.append(id_cuenta)
+        filtros_mov.append("al.id_cuenta = %s")
+        params_mov.append(id_cuenta)
+
+    if fecha_desde:
+        filtros_previos.append("a.fecha < %s")
+        params_previos.append(fecha_desde)
+        filtros_mov.append("a.fecha >= %s")
+        params_mov.append(fecha_desde)
+
+    if fecha_hasta:
+        filtros_mov.append("a.fecha <= %s")
+        params_mov.append(fecha_hasta)
+
+    sql_previos = f"""
+        SELECT
+            al.id_cuenta,
+            COALESCE(SUM(al.debe), 0) AS saldo_debe_anterior,
+            COALESCE(SUM(al.haber), 0) AS saldo_haber_anterior
+        FROM asiento_linea al
+        JOIN asiento a
+          ON a.id_cliente = al.id_cliente
+         AND a.id_asiento = al.id_asiento
+        WHERE {' AND '.join(filtros_previos)}
+        GROUP BY al.id_cuenta
+    """
+
+    sql_movimientos = f"""
+        SELECT
+            al.id_cuenta,
+            al.id_linea,
+            a.id_asiento,
+            a.numero_asiento,
+            a.fecha,
+            a.descripcion,
+            a.referencia,
+            a.tipo_asiento,
+            al.glosa,
+            al.debe,
+            al.haber,
+            EXISTS (
+                SELECT 1
+                FROM libro_iva_comprobante lic
+                WHERE lic.id_cliente = a.id_cliente
+                  AND lic.id_asiento = a.id_asiento
+            ) AS es_libro_iva
+        FROM asiento_linea al
+        JOIN asiento a
+          ON a.id_cliente = al.id_cliente
+         AND a.id_asiento = al.id_asiento
+        WHERE {' AND '.join(filtros_mov)}
+        ORDER BY a.fecha, a.numero_asiento, al.id_linea
+    """
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql_cuentas, params_cuentas)
+            cuentas = cur.fetchall()
+
+            saldos_previos = {}
+            if fecha_desde:
+                cur.execute(sql_previos, params_previos)
+                saldos_previos = {
+                    row["id_cuenta"]: (row["saldo_debe_anterior"] or Decimal("0")) - (row["saldo_haber_anterior"] or Decimal("0"))
+                    for row in cur.fetchall()
+                }
+
+            cur.execute(sql_movimientos, params_mov)
+            movimientos = cur.fetchall()
+
+    cuentas_map = {
+        cuenta["id_cuenta"]: {
+            "id_cuenta": cuenta["id_cuenta"],
+            "codigo": cuenta["codigo"],
+            "denominacion": cuenta["denominacion"],
+            "saldo_anterior": saldos_previos.get(cuenta["id_cuenta"], Decimal("0")),
+            "total_debe": Decimal("0"),
+            "total_haber": Decimal("0"),
+            "saldo_final": saldos_previos.get(cuenta["id_cuenta"], Decimal("0")),
+            "movimientos": [],
+        }
+        for cuenta in cuentas
+    }
+
+    for mov in movimientos:
+        cuenta = cuentas_map.get(mov["id_cuenta"])
+        if not cuenta:
+            continue
+
+        debe = mov["debe"] or Decimal("0")
+        haber = mov["haber"] or Decimal("0")
+        cuenta["total_debe"] += debe
+        cuenta["total_haber"] += haber
+        cuenta["saldo_final"] += debe - haber
+
+        cuenta["movimientos"].append({
+            "id_linea": mov["id_linea"],
+            "id_asiento": mov["id_asiento"],
+            "numero_asiento": mov["numero_asiento"],
+            "fecha": mov["fecha"],
+            "descripcion": mov["descripcion"],
+            "referencia": mov["referencia"],
+            "tipo_asiento": mov["tipo_asiento"],
+            "glosa": mov["glosa"],
+            "debe": debe,
+            "haber": haber,
+            "saldo": cuenta["saldo_final"],
+            "es_libro_iva": mov["es_libro_iva"],
+        })
+
+    cuentas_lista = list(cuentas_map.values())
+    if solo_con_movimiento:
+        cuentas_lista = [cuenta for cuenta in cuentas_lista if cuenta["movimientos"]]
+
+    return cuentas_lista
+
+
+def fetch_libro_diario(id_cliente, fecha_desde=None, fecha_hasta=None, tipo_asiento=None):
+    filtros_asiento = ["a.id_cliente = %s"]
+    params_asiento = [id_cliente]
+
+    if fecha_desde:
+        filtros_asiento.append("a.fecha >= %s")
+        params_asiento.append(fecha_desde)
+    if fecha_hasta:
+        filtros_asiento.append("a.fecha <= %s")
+        params_asiento.append(fecha_hasta)
+    if tipo_asiento and tipo_asiento != "TODOS":
+        filtros_asiento.append("a.tipo_asiento = %s")
+        params_asiento.append(tipo_asiento)
+
+    sql_asientos = f"""
+        SELECT
+            a.id_asiento,
+            a.numero_asiento,
+            a.fecha,
+            a.descripcion,
+            a.referencia,
+            a.estado,
+            a.tipo_asiento,
+            COALESCE(SUM(al.debe), 0) AS total_debe,
+            COALESCE(SUM(al.haber), 0) AS total_haber,
+            EXISTS (
+                SELECT 1
+                FROM libro_iva_comprobante lic
+                WHERE lic.id_cliente = a.id_cliente
+                  AND lic.id_asiento = a.id_asiento
+            ) AS es_libro_iva
+        FROM asiento a
+        LEFT JOIN asiento_linea al
+          ON al.id_cliente = a.id_cliente
+         AND al.id_asiento = a.id_asiento
+        WHERE {' AND '.join(filtros_asiento)}
+        GROUP BY a.id_asiento, a.numero_asiento, a.fecha, a.descripcion, a.referencia, a.estado, a.tipo_asiento
+        ORDER BY a.fecha, a.numero_asiento, a.id_asiento
+    """
+
+    sql_lineas = f"""
+        SELECT
+            al.id_asiento,
+            al.id_linea,
+            cc.codigo,
+            cc.denominacion,
+            al.glosa,
+            al.debe,
+            al.haber,
+            EXISTS (
+                SELECT 1
+                FROM libro_iva_comprobante lic
+                WHERE lic.id_cliente = al.id_cliente
+                  AND lic.id_asiento = al.id_asiento
+            ) AS es_libro_iva
+        FROM asiento_linea al
+        JOIN asiento a
+          ON a.id_cliente = al.id_cliente
+         AND a.id_asiento = al.id_asiento
+        JOIN cuenta_contable cc
+          ON cc.id_cliente = al.id_cliente
+         AND cc.id_cuenta = al.id_cuenta
+        WHERE {' AND '.join(filtros_asiento).replace('a.', 'a.')}
+        ORDER BY a.fecha, a.numero_asiento, al.id_linea
+    """
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql_asientos, params_asiento)
+            asientos = cur.fetchall()
+            cur.execute(sql_lineas, params_asiento)
+            lineas = cur.fetchall()
+
+    lineas_por_asiento = {}
+    for linea in lineas:
+        lineas_por_asiento.setdefault(linea["id_asiento"], []).append({
+            "id_linea": linea["id_linea"],
+            "codigo": linea["codigo"],
+            "denominacion": linea["denominacion"],
+            "glosa": linea["glosa"],
+            "debe": linea["debe"] or Decimal("0"),
+            "haber": linea["haber"] or Decimal("0"),
+            "es_libro_iva": linea["es_libro_iva"],
+        })
+
+    resultado = []
+    for asiento in asientos:
+        asiento["lineas"] = lineas_por_asiento.get(asiento["id_asiento"], [])
+        resultado.append(asiento)
+
+    return resultado
+
+
 def fetch_proximo_numero_asiento(id_cliente):
     sql = """
         SELECT COALESCE(MAX(numero_asiento), 0) + 1
@@ -730,6 +1246,102 @@ def crear_asiento_desde_form(id_cliente, tipo_asiento, solo_si_no_existen=False)
     return id_asiento, None
 
 
+def actualizar_asiento_desde_form(id_cliente, id_asiento):
+    fecha = request.form.get("fecha", "").strip()
+    descripcion = request.form.get("descripcion", "").strip()
+    referencia = request.form.get("referencia", "").strip().upper() or "DIARIO"
+
+    cuentas_ids = request.form.getlist("linea_id_cuenta[]")
+    glosas = request.form.getlist("linea_glosa[]")
+    debes = request.form.getlist("linea_debe[]")
+    haberes = request.form.getlist("linea_haber[]")
+
+    if not fecha:
+        return "La fecha del asiento es obligatoria"
+
+    if not descripcion:
+        return "El concepto del asiento es obligatorio"
+
+    lineas, error = procesar_lineas_asiento(id_cliente, cuentas_ids, glosas, debes, haberes)
+    if error:
+        return error
+
+    usuario = get_current_username()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            before_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+            if not before_asiento:
+                return "Asiento no encontrado"
+
+            if before_asiento.get("tipo_asiento") in ("COMPRA", "VENTA"):
+                return "Los asientos originados desde el libro IVA deben modificarse desde el libro IVA"
+
+            cur.execute("""
+                SELECT id_linea
+                FROM asiento_linea
+                WHERE id_cliente = %s
+                  AND id_asiento = %s
+                ORDER BY id_linea
+            """, (id_cliente, id_asiento))
+            lineas_previas = [
+                fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (row[0],))
+                for row in cur.fetchall()
+            ]
+
+            datos_asiento = {
+                "fecha": fecha,
+                "descripcion": descripcion,
+                "referencia": referencia,
+            }
+            asignaciones, params = build_update_with_audit("asiento", datos_asiento, usuario)
+            cur.execute(
+                f"""
+                UPDATE asiento
+                SET {", ".join(asignaciones)}
+                WHERE id_cliente = %s
+                  AND id_asiento = %s
+                """,
+                params + [id_cliente, id_asiento]
+            )
+            after_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+            registrar_auditoria(cur, "asiento", "UPDATE", before=before_asiento, after=after_asiento, usuario=usuario)
+
+            cur.execute("""
+                DELETE FROM asiento_linea
+                WHERE id_cliente = %s
+                  AND id_asiento = %s
+            """, (id_cliente, id_asiento))
+            for linea_previa in lineas_previas:
+                registrar_auditoria(cur, "asiento_linea", "DELETE", before=linea_previa, usuario=usuario)
+
+            for linea in lineas:
+                datos_linea = {
+                    "id_asiento": id_asiento,
+                    "id_cliente": id_cliente,
+                    "id_cuenta": linea["id_cuenta"],
+                    "glosa": linea["glosa"] or None,
+                    "debe": linea["debe"],
+                    "haber": linea["haber"],
+                }
+                columnas_insert, placeholders, params = build_insert_with_audit("asiento_linea", datos_linea, usuario)
+                cur.execute(
+                    f"""
+                    INSERT INTO asiento_linea ({", ".join(columnas_insert)})
+                    VALUES ({", ".join(placeholders)})
+                    RETURNING id_linea
+                    """,
+                    params
+                )
+                id_linea = cur.fetchone()[0]
+                after_linea = fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (id_linea,))
+                registrar_auditoria(cur, "asiento_linea", "INSERT", after=after_linea, usuario=usuario)
+
+            conn.commit()
+
+    return None
+
+
 @app.route("/")
 def index():
     clientes = fetch_clientes()
@@ -785,6 +1397,183 @@ def buscar_personas_ref_por_nombre_apellido():
     return jsonify({"ok": True, "personas": resultados})
 
 
+@app.route("/personas-ref/crear", methods=["POST"])
+def crear_persona_ref():
+    numero = request.form.get("numero", "").strip()
+    tipo_registro = request.form.get("tipo_registro", "").strip().upper()
+    nombre = request.form.get("nombre", "").strip()
+    apellido = request.form.get("apellido", "").strip()
+    fecha_nac = request.form.get("fecha_nac", "").strip()
+    usuario = get_current_username()
+
+    if tipo_registro not in ("RUC", "CI"):
+        return jsonify({"ok": False, "error": "Tipo de registro inválido"}), 400
+
+    if not numero:
+        return jsonify({"ok": False, "error": "El número es obligatorio"}), 400
+
+    if not nombre:
+        return jsonify({"ok": False, "error": "El nombre es obligatorio"}), 400
+
+    if tipo_registro != "CI":
+        apellido = ""
+        fecha_nac = ""
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            existente = fetch_persona_ref_ident(tipo_registro, numero, "PY")
+            if existente:
+                nombre_completo = existente["rf_nombre"] or ""
+                if existente["rf_tipo_ident"] == "CI" and existente["rf_apellido"]:
+                    nombre_completo = f"{nombre_completo} {existente['rf_apellido']}".strip()
+                return jsonify({
+                    "ok": True,
+                    "ya_existia": True,
+                    "persona": {
+                        "numero": existente["rf_numero"],
+                        "nombre": nombre_completo
+                    }
+                })
+
+            datos_persona = {
+                "rf_tipo_ident": tipo_registro,
+                "rf_numero": numero,
+                "rf_pais_swift": "PY",
+                "rf_nombre": nombre,
+                "rf_apellido": apellido or None,
+                "rf_fecha_nac": fecha_nac or None,
+            }
+            columnas_insert, placeholders, params = build_insert_with_audit("personas_ref", datos_persona, usuario)
+            cur.execute(
+                f"""
+                INSERT INTO personas_ref
+                ({", ".join(columnas_insert)})
+                VALUES ({", ".join(placeholders)})
+                """,
+                params
+            )
+            after = fetch_row_dict(
+                cur,
+                "personas_ref",
+                "rf_tipo_ident = %s AND rf_numero = %s AND rf_pais_swift = %s",
+                (tipo_registro, numero, "PY")
+            )
+            registrar_auditoria(cur, "personas_ref", "INSERT", after=after, usuario=usuario)
+            conn.commit()
+
+    nombre_completo = nombre
+    if tipo_registro == "CI" and apellido:
+        nombre_completo = f"{nombre} {apellido}".strip()
+
+    return jsonify({
+        "ok": True,
+        "persona": {
+            "numero": numero,
+            "nombre": nombre_completo
+        }
+    })
+
+
+@app.route("/buscar-persona-ref-detalle")
+def buscar_persona_ref_detalle():
+    q = request.args.get("q", "").strip()
+
+    if not q:
+        return jsonify({"ok": False, "error": "Debe indicar un RUC o CI."}), 400
+
+    persona = fetch_persona_ref_por_query(q)
+    if not persona:
+        return jsonify({"ok": False, "error": "Cliente no encontrado."}), 404
+
+    nombre_completo = persona["rf_nombre"] or ""
+    if persona["rf_tipo_ident"] == "CI" and persona["rf_apellido"]:
+        nombre_completo = f"{nombre_completo} {persona['rf_apellido']}".strip()
+
+    return jsonify({
+        "ok": True,
+        "persona": {
+            "tipo_ident": persona["rf_tipo_ident"],
+            "numero": persona["rf_numero"],
+            "pais_swift": persona["rf_pais_swift"],
+            "nombre": persona["rf_nombre"] or "",
+            "apellido": persona["rf_apellido"] or "",
+            "nombre_completo": nombre_completo,
+            "fecha_nac": persona["rf_fecha_nac"].strftime("%Y-%m-%d") if persona["rf_fecha_nac"] else ""
+        }
+    })
+
+
+@app.route("/personas-ref/actualizar", methods=["POST"])
+def actualizar_persona_ref():
+    tipo_ident = request.form.get("tipo_ident", "").strip().upper()
+    numero = request.form.get("numero", "").strip()
+    pais_swift = request.form.get("pais_swift", "PY").strip().upper() or "PY"
+    nombre = request.form.get("nombre", "").strip()
+    usuario = get_current_username()
+
+    if tipo_ident not in ("RUC", "CI"):
+        return jsonify({"ok": False, "error": "Tipo de registro inválido"}), 400
+
+    if not numero:
+        return jsonify({"ok": False, "error": "El número es obligatorio"}), 400
+
+    if not nombre:
+        return jsonify({"ok": False, "error": "El nombre es obligatorio"}), 400
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            before = fetch_row_dict(
+                cur,
+                "personas_ref",
+                "rf_tipo_ident = %s AND rf_numero = %s AND rf_pais_swift = %s",
+                (tipo_ident, numero, pais_swift)
+            )
+            if not before:
+                return jsonify({"ok": False, "error": "Cliente no encontrado."}), 404
+
+            asignaciones, params = build_update_with_audit(
+                "personas_ref",
+                {"rf_nombre": nombre},
+                usuario
+            )
+            cur.execute(
+                f"""
+                UPDATE personas_ref
+                SET {", ".join(asignaciones)}
+                WHERE rf_tipo_ident = %s
+                  AND rf_numero = %s
+                  AND rf_pais_swift = %s
+                """,
+                params + [tipo_ident, numero, pais_swift]
+            )
+            after = fetch_row_dict(
+                cur,
+                "personas_ref",
+                "rf_tipo_ident = %s AND rf_numero = %s AND rf_pais_swift = %s",
+                (tipo_ident, numero, pais_swift)
+            )
+            registrar_auditoria(cur, "personas_ref", "UPDATE", before=before, after=after, usuario=usuario)
+            conn.commit()
+
+    persona_actualizada = fetch_persona_ref_ident(tipo_ident, numero, pais_swift)
+    nombre_completo = persona_actualizada["rf_nombre"] or ""
+    if persona_actualizada["rf_tipo_ident"] == "CI" and persona_actualizada["rf_apellido"]:
+        nombre_completo = f"{nombre_completo} {persona_actualizada['rf_apellido']}".strip()
+
+    return jsonify({
+        "ok": True,
+        "persona": {
+            "tipo_ident": persona_actualizada["rf_tipo_ident"],
+            "numero": persona_actualizada["rf_numero"],
+            "pais_swift": persona_actualizada["rf_pais_swift"],
+            "nombre": persona_actualizada["rf_nombre"] or "",
+            "apellido": persona_actualizada["rf_apellido"] or "",
+            "nombre_completo": nombre_completo,
+            "fecha_nac": persona_actualizada["rf_fecha_nac"].strftime("%Y-%m-%d") if persona_actualizada["rf_fecha_nac"] else ""
+        }
+    })
+
+
 @app.route("/login", methods=["POST"])
 def login():
     username = request.form.get("username", "").lower().strip()
@@ -829,12 +1618,253 @@ def contabilidad_cliente(id_cliente):
         cliente_nombre=cliente_nombre
     )
 
+
+@app.route("/cliente/<int:id_cliente>/contabilidad/libro-mayor")
+def libro_mayor(id_cliente):
+    cliente_nombre = fetch_cliente_nombre(id_cliente)
+    cuentas = fetch_cuentas_imputables(id_cliente)
+
+    fecha_desde_raw = request.args.get("fecha_desde", "").strip()
+    fecha_hasta_raw = request.args.get("fecha_hasta", "").strip()
+    id_cuenta = request.args.get("id_cuenta", type=int)
+    solo_con_movimiento = True if not request.args else request.args.get("solo_movimiento") == "1"
+    print_mode = request.args.get("print") == "1"
+    pdf_mode = request.args.get("format") == "pdf"
+    excel_mode = request.args.get("format") == "xlsx"
+    pdf_orientation = request.args.get("orient", "portrait").strip().lower()
+    if pdf_orientation not in ("portrait", "landscape"):
+        pdf_orientation = "portrait"
+
+    fecha_desde = None
+    fecha_hasta = None
+    errores = []
+
+    if fecha_desde_raw:
+        try:
+            fecha_desde = date.fromisoformat(fecha_desde_raw)
+        except ValueError:
+            errores.append("La fecha desde no es válida.")
+
+    if fecha_hasta_raw:
+        try:
+            fecha_hasta = date.fromisoformat(fecha_hasta_raw)
+        except ValueError:
+            errores.append("La fecha hasta no es válida.")
+
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        errores.append("La fecha desde no puede ser mayor que la fecha hasta.")
+
+    libro = []
+    if not errores:
+        libro = fetch_libro_mayor(
+            id_cliente,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            id_cuenta=id_cuenta,
+            solo_con_movimiento=solo_con_movimiento
+        )
+
+    resumen = {
+        "cuentas": len(libro),
+        "asientos": len({mov["id_asiento"] for cuenta in libro for mov in cuenta["movimientos"]}),
+        "total_debe": sum((cuenta["total_debe"] for cuenta in libro), Decimal("0")),
+        "total_haber": sum((cuenta["total_haber"] for cuenta in libro), Decimal("0")),
+    }
+
+    context = dict(
+        id_cliente=id_cliente,
+        cliente_nombre=cliente_nombre,
+        cuentas=cuentas,
+        libro=libro,
+        fecha_desde=fecha_desde_raw,
+        fecha_hasta=fecha_hasta_raw,
+        id_cuenta=id_cuenta,
+        solo_con_movimiento=solo_con_movimiento,
+        print_mode=print_mode,
+        pdf_orientation=pdf_orientation,
+        errores=errores,
+        resumen=resumen,
+    )
+
+    if pdf_mode and not errores:
+        if WEASYPRINT_AVAILABLE:
+            pdf_context = dict(context)
+            pdf_context["print_mode"] = True
+            return build_pdf_response("contabilidad_libro_mayor.html", f"libro_mayor_cliente_{id_cliente}.pdf", **pdf_context)
+        flash("Para descargar PDF instalá la librería weasyprint.", "warning")
+
+    if excel_mode and not errores:
+        if OPENPYXL_AVAILABLE:
+            return build_excel_response_libro_mayor(f"libro_mayor_cliente_{id_cliente}.xlsx", libro)
+        flash("Para exportar Excel instalá openpyxl.", "warning")
+
+    return render_template("contabilidad_libro_mayor.html", **context)
+
+
+@app.route("/cliente/<int:id_cliente>/contabilidad/libro-diario")
+def libro_diario_reporte(id_cliente):
+    cliente_nombre = fetch_cliente_nombre(id_cliente)
+    fecha_desde_raw = request.args.get("fecha_desde", "").strip()
+    fecha_hasta_raw = request.args.get("fecha_hasta", "").strip()
+    tipo_asiento = request.args.get("tipo_asiento", "").strip().upper() or "TODOS"
+    print_mode = request.args.get("print") == "1"
+    pdf_mode = request.args.get("format") == "pdf"
+
+    fecha_desde = None
+    fecha_hasta = None
+    errores = []
+
+    if fecha_desde_raw:
+        try:
+            fecha_desde = date.fromisoformat(fecha_desde_raw)
+        except ValueError:
+            errores.append("La fecha desde no es válida.")
+
+    if fecha_hasta_raw:
+        try:
+            fecha_hasta = date.fromisoformat(fecha_hasta_raw)
+        except ValueError:
+            errores.append("La fecha hasta no es válida.")
+
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        errores.append("La fecha desde no puede ser mayor que la fecha hasta.")
+
+    if tipo_asiento not in ("TODOS", "APERTURA", "DIARIO", "COMPRA", "VENTA"):
+        tipo_asiento = "TODOS"
+
+    asientos = []
+    if not errores:
+        asientos = fetch_libro_diario(
+            id_cliente,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            tipo_asiento=tipo_asiento,
+        )
+
+    resumen = {
+        "asientos": len(asientos),
+        "lineas": sum(len(asiento["lineas"]) for asiento in asientos),
+        "total_debe": sum((asiento["total_debe"] or Decimal("0") for asiento in asientos), Decimal("0")),
+        "total_haber": sum((asiento["total_haber"] or Decimal("0") for asiento in asientos), Decimal("0")),
+    }
+
+    context = dict(
+        id_cliente=id_cliente,
+        cliente_nombre=cliente_nombre,
+        asientos=asientos,
+        fecha_desde=fecha_desde_raw,
+        fecha_hasta=fecha_hasta_raw,
+        tipo_asiento=tipo_asiento,
+        print_mode=print_mode,
+        errores=errores,
+        resumen=resumen,
+    )
+
+    if pdf_mode and not errores:
+        if WEASYPRINT_AVAILABLE:
+            pdf_context = dict(context)
+            pdf_context["print_mode"] = True
+            return build_pdf_response("contabilidad_libro_diario.html", f"libro_diario_cliente_{id_cliente}.pdf", **pdf_context)
+        flash("Para descargar PDF instalá la librería weasyprint.", "warning")
+
+    return render_template("contabilidad_libro_diario.html", **context)
+
+
+@app.route("/cliente/<int:id_cliente>/contabilidad/libros-compras-ventas")
+def libros_compras_ventas(id_cliente):
+    cliente = fetch_cliente_basico(id_cliente) or {"nombre": f"Cliente #{id_cliente}", "ruc": "", "dv": ""}
+    tipo_libro = request.args.get("tipo_libro", "COMPRA").strip().upper()
+    fecha_desde_raw = request.args.get("fecha_desde", "").strip()
+    fecha_hasta_raw = request.args.get("fecha_hasta", "").strip()
+    print_mode = request.args.get("print") == "1"
+    pdf_mode = request.args.get("format") == "pdf"
+    excel_mode = request.args.get("format") == "xlsx"
+    pdf_orientation = request.args.get("orient", "landscape").strip().lower()
+    if pdf_orientation not in ("portrait", "landscape"):
+        pdf_orientation = "landscape"
+
+    if tipo_libro not in ("COMPRA", "VENTA"):
+        tipo_libro = "COMPRA"
+
+    fecha_desde = None
+    fecha_hasta = None
+    errores = []
+
+    if fecha_desde_raw:
+        try:
+            fecha_desde = date.fromisoformat(fecha_desde_raw)
+        except ValueError:
+            errores.append("La fecha desde no es válida.")
+
+    if fecha_hasta_raw:
+        try:
+            fecha_hasta = date.fromisoformat(fecha_hasta_raw)
+        except ValueError:
+            errores.append("La fecha hasta no es válida.")
+
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        errores.append("La fecha desde no puede ser mayor que la fecha hasta.")
+
+    filas = []
+    if not errores:
+        filas = fetch_libro_compras_ventas(id_cliente, tipo_libro, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+
+    resumen = {
+        "exento": sum((row["exento"] or Decimal("0") for row in filas), Decimal("0")),
+        "gravado_5": sum((row["gravado_5"] or Decimal("0") for row in filas), Decimal("0")),
+        "gravado_10": sum((row["gravado_10"] or Decimal("0") for row in filas), Decimal("0")),
+        "iva_5": sum((row["iva_5"] or Decimal("0") for row in filas), Decimal("0")),
+        "iva_10": sum((row["iva_10"] or Decimal("0") for row in filas), Decimal("0")),
+        "total": sum((row["total"] or Decimal("0") for row in filas), Decimal("0")),
+    }
+
+    cliente_ruc = ""
+    if cliente.get("ruc"):
+        cliente_ruc = f"{cliente['ruc']}-{cliente.get('dv')}" if cliente.get("dv") else str(cliente["ruc"])
+
+    context = dict(
+        id_cliente=id_cliente,
+        cliente_nombre=cliente.get("nombre") or f"Cliente #{id_cliente}",
+        cliente_ruc=cliente_ruc,
+        tipo_libro=tipo_libro,
+        fecha_desde=fecha_desde_raw,
+        fecha_hasta=fecha_hasta_raw,
+        print_mode=print_mode,
+        pdf_orientation=pdf_orientation,
+        errores=errores,
+        filas=filas,
+        resumen=resumen,
+    )
+
+    if pdf_mode and not errores:
+        if WEASYPRINT_AVAILABLE:
+            pdf_context = dict(context)
+            pdf_context["print_mode"] = True
+            return build_pdf_response(
+                "contabilidad_libros_compras_ventas.html",
+                f"libro_{'compras' if tipo_libro == 'COMPRA' else 'ventas'}_cliente_{id_cliente}.pdf",
+                **pdf_context
+            )
+        flash("Para descargar PDF instalá la librería weasyprint.", "warning")
+
+    if excel_mode and not errores:
+        if OPENPYXL_AVAILABLE:
+            return build_excel_response_libro_compras_ventas(
+                f"libro_{'compras' if tipo_libro == 'COMPRA' else 'ventas'}_cliente_{id_cliente}.xlsx",
+                tipo_libro,
+                filas
+            )
+        flash("Para exportar Excel instalá openpyxl.", "warning")
+
+    return render_template("contabilidad_libros_compras_ventas.html", **context)
+
 @app.route("/cliente/<int:id_cliente>/contabilidad/asiento-diario")
 def asiento_diario(id_cliente):
     cliente_nombre = fetch_cliente_nombre(id_cliente)
     asientos = fetch_asientos_cliente(id_cliente)
     cuentas = fetch_cuentas_imputables(id_cliente)
     nuevo = request.args.get("nuevo") == "1"
+    editar = request.args.get("editar") == "1"
     tipo_nuevo = request.args.get("tipo", "").strip().upper() or ("APERTURA" if not asientos else "DIARIO")
     proximo_numero_asiento = fetch_proximo_numero_asiento(id_cliente)
 
@@ -867,6 +1897,7 @@ def asiento_diario(id_cliente):
         total_haber=total_haber,
         mostrar_alerta_apertura=not asientos and not nuevo,
         nuevo=nuevo,
+        editar=editar and asiento_actual is not None and not nuevo,
         tipo_nuevo=tipo_nuevo,
         proximo_numero_asiento=proximo_numero_asiento
     )
@@ -885,10 +1916,20 @@ def crear_asiento_apertura(id_cliente):
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/asiento-guardar", methods=["POST"])
 def guardar_asiento_diario(id_cliente):
+    id_asiento = request.form.get("id_asiento", type=int)
+    if id_asiento:
+        error = actualizar_asiento_desde_form(id_cliente, id_asiento)
+        if error:
+            flash(error, "danger")
+            return redirect(url_for("asiento_diario", id_cliente=id_cliente, id_asiento=id_asiento, editar=1))
+
+        flash("Asiento actualizado correctamente", "success")
+        return redirect(url_for("asiento_diario", id_cliente=id_cliente, id_asiento=id_asiento))
+
     tipo_asiento = request.form.get("tipo_asiento", "DIARIO").strip().upper() or "DIARIO"
     solo_si_no_existen = tipo_asiento == "APERTURA"
 
-    id_asiento, error = crear_asiento_desde_form(
+    id_asiento_nuevo, error = crear_asiento_desde_form(
         id_cliente,
         tipo_asiento,
         solo_si_no_existen=solo_si_no_existen
@@ -898,7 +1939,7 @@ def guardar_asiento_diario(id_cliente):
         return redirect(url_for("asiento_diario", id_cliente=id_cliente, nuevo=1, tipo=tipo_asiento))
 
     flash("Asiento guardado correctamente", "success")
-    return redirect(url_for("asiento_diario", id_cliente=id_cliente, id_asiento=id_asiento))
+    return redirect(url_for("asiento_diario", id_cliente=id_cliente, id_asiento=id_asiento_nuevo))
 
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/asiento/<int:id_asiento>/eliminar", methods=["POST"])

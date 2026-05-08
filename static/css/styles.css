@@ -930,6 +930,17 @@ thead.sticky-top th {
   padding: 8px 12px;
 }
 
+.iva-date-input::-webkit-calendar-picker-indicator{
+  display: none;
+  -webkit-appearance: none;
+}
+
+.iva-date-input::-webkit-inner-spin-button,
+.iva-date-input::-webkit-clear-button{
+  display: none;
+  -webkit-appearance: none;
+}
+
 .iva-modal-grid{
   display: grid;
   gap: 6px;
@@ -1153,6 +1164,271 @@ thead.sticky-top th {
 .modal-body label{
     font-size:13px;
     margin-bottom:2px;
+}
+
+.libro-mayor-page{
+  padding-bottom: 24px;
+}
+
+.libro-mayor-hero .card-body{
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.libro-mayor-stack{
+  display: flex;
+  flex-direction: column;
+}
+
+.libro-mayor-card{
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.libro-mayor-card-head{
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.libro-mayor-codigo{
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e8f1fc;
+  color: #184a8b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  margin-bottom: 8px;
+}
+
+.libro-mayor-mini-summary{
+  min-width: 250px;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid #dbe4f0;
+}
+
+.libro-mayor-mini-summary div{
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.libro-mayor-mini-summary span{
+  color: #64748b;
+}
+
+.libro-mayor-table-wrap{
+  max-height: none;
+  border-color: #dbe4f0;
+}
+
+.libro-mayor-table thead th{
+  background: #eef4fb;
+  border-bottom: 1px solid #d5e1ef;
+}
+
+.libro-mayor-opening td{
+  background: #fffdf2;
+}
+
+.libro-mayor-badge{
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.libro-mayor-table tfoot th{
+  background: #f8fbff;
+}
+
+.libro-mayor-print-mode .btn,
+.libro-mayor-print-mode form,
+.libro-mayor-print-mode .alert{
+  display: none !important;
+}
+
+@media (max-width: 991px){
+  .libro-mayor-card-head{
+    flex-direction: column;
+  }
+
+  .libro-mayor-mini-summary{
+    min-width: 100%;
+  }
+}
+
+@media print{
+  body{
+    background: #fff !important;
+  }
+
+  .navbar,
+  .btn,
+  .menu-contable,
+  form,
+  .alert{
+    display: none !important;
+  }
+
+  .container{
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .card,
+  .libro-mayor-card{
+    box-shadow: none !important;
+  }
+
+  .libro-mayor-card{
+    page-break-inside: avoid;
+    border-radius: 0;
+    border: 1px solid #cbd5e1;
+  }
+
+  .libro-mayor-table-wrap{
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .libro-mayor-table{
+    font-size: 11px;
+  }
+}
+
+.mayor-print-sheet{
+  background: #fff;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+}
+
+.mayor-print-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.mayor-print-header h1{
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: .04em;
+}
+
+.mayor-print-periodo,
+.mayor-print-cliente{
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mayor-print-columns,
+.mayor-print-row,
+.mayor-print-totales,
+.mayor-print-cuenta-head{
+  display: grid;
+  grid-template-columns: 70px 48px 130px minmax(0, 1fr) 90px 110px 110px 110px;
+  gap: 0;
+  align-items: baseline;
+}
+
+.mayor-print-columns{
+  font-weight: 700;
+  border-bottom: 1px solid #111827;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+}
+
+.mayor-print-cuenta{
+  margin-bottom: 18px;
+  page-break-inside: avoid;
+}
+
+.mayor-print-cuenta-head{
+  border-bottom: 1px solid #111827;
+  padding-top: 4px;
+  padding-bottom: 2px;
+  font-weight: 700;
+}
+
+.mayor-print-codigo{
+  font-size: 15px;
+}
+
+.mayor-print-denominacion{
+  grid-column: 2 / span 3;
+  font-size: 15px;
+  text-transform: uppercase;
+}
+
+.mayor-print-saldo-anterior-label{
+  grid-column: 6 / span 2;
+  text-align: right;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.mayor-print-saldo-anterior-valor{
+  text-align: right;
+}
+
+.mayor-print-row{
+  padding: 1px 0;
+}
+
+.mayor-print-totales{
+  border-top: 1px solid #111827;
+  margin-top: 2px;
+  padding-top: 2px;
+  font-weight: 700;
+}
+
+.libro-cv-table tfoot th{
+  background: #f8fbff;
+}
+
+.libro-cv-print-columns,
+.libro-cv-print-row,
+.libro-cv-print-totales{
+  display: grid;
+  grid-template-columns: 150px 70px minmax(0, 1.4fr) 110px 90px 95px 95px 85px 85px 95px;
+  gap: 0;
+  align-items: baseline;
+}
+
+.libro-cv-print-columns{
+  font-weight: 700;
+  border-bottom: 1px solid #111827;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+}
+
+.libro-cv-print-row{
+  padding: 1px 0;
+}
+
+.libro-cv-print-totales{
+  border-top: 1px solid #111827;
+  margin-top: 8px;
+  padding-top: 2px;
+  font-weight: 700;
 }
 
 .modal-body .form-control{
