@@ -644,16 +644,26 @@ def cuenta_imputable_existe(id_cliente, id_cuenta):
 
 
 def fetch_tipos_documento(libro):
-    sql = """
-        SELECT id_tipo_documento, codigo, descripcion, aplica_libro
-        FROM tipo_documento
-        WHERE activo = true
-          AND aplica_libro IN (%s, 'AMBOS')
-        ORDER BY codigo
-    """
+    if libro in ("COMPRA", "VENTA"):
+        sql = """
+            SELECT id_tipo_documento, codigo, descripcion, aplica_libro
+            FROM tipo_documento
+            WHERE activo = true
+              AND aplica_libro IN (%s, 'AMBOS')
+            ORDER BY codigo
+        """
+        params = (libro,)
+    else:
+        sql = """
+            SELECT id_tipo_documento, codigo, descripcion, aplica_libro
+            FROM tipo_documento
+            WHERE activo = true
+            ORDER BY codigo
+        """
+        params = ()
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (libro,))
+            cur.execute(sql, params)
             return cur.fetchall()
 
 
@@ -684,6 +694,11 @@ def fetch_tipos_iva(libro):
             else:
                 select_extra.append("false AS incluido")
 
+            if "aplica_libro" in columnas:
+                select_extra.append("aplica_libro")
+            else:
+                select_extra.append("NULL::varchar AS aplica_libro")
+
             sql = f"""
                 SELECT id_tipo_iva, denominacion, {', '.join(select_extra)}
                 FROM tipo_iva
@@ -708,11 +723,19 @@ def fetch_libro_iva_comprobantes(id_cliente, tipo_libro):
                 return []
 
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
+            filtros = ["lic.id_cliente = %s"]
+            params = [id_cliente]
+
+            if tipo_libro in ("COMPRA", "VENTA"):
+                filtros.append("lic.tipo_libro = %s")
+                params.append(tipo_libro)
+
+            cur.execute(f"""
                 SELECT
                     lic.id_comprobante_iva,
                     lic.id_asiento,
                     a.numero_asiento,
+                    lic.tipo_libro,
                     lic.fecha,
                     lic.id_tipo_documento,
                     lic.id_tipo_iva,
@@ -763,11 +786,484 @@ def fetch_libro_iva_comprobantes(id_cliente, tipo_libro):
                 LEFT JOIN cuenta_contable ccc
                   ON ccc.id_cliente = lic.id_cliente
                  AND ccc.id_cuenta = lic.id_contracuenta
-                WHERE lic.id_cliente = %s
-                  AND lic.tipo_libro = %s
+                WHERE {' AND '.join(filtros)}
                 ORDER BY a.numero_asiento, lic.fecha, lic.id_comprobante_iva
-            """, (id_cliente, tipo_libro))
+            """, params)
             return cur.fetchall()
+
+
+def construir_descripcion_comprobante_iva(documento_codigo, numero_comprobante, razon_social, detalle):
+    detalle_limpio = (detalle or "").strip()
+    if detalle_limpio:
+        return detalle_limpio
+
+    partes = [
+        (documento_codigo or "").title(),
+        (numero_comprobante or "").strip(),
+        (razon_social or "").strip(),
+    ]
+    return " ".join(parte for parte in partes if parte).strip()
+
+
+def construir_lineas_comprobante_iva(tipo_libro, id_cuenta, id_cta_iva_5, id_cta_iva_10, id_contracuenta,
+                                     exento, gravado_5, iva_5, gravado_10, iva_10, total, descripcion):
+    base = exento + gravado_5 + gravado_10
+    lineas = []
+
+    if tipo_libro == "COMPRA":
+        lineas.append((id_cuenta, descripcion, Decimal("0"), total))
+        if iva_5 > 0:
+            lineas.append((id_cta_iva_5, descripcion, iva_5, Decimal("0")))
+        if iva_10 > 0:
+            lineas.append((id_cta_iva_10, descripcion, iva_10, Decimal("0")))
+        if base > 0:
+            lineas.append((id_contracuenta, descripcion, base, Decimal("0")))
+    else:
+        lineas.append((id_cuenta, descripcion, total, Decimal("0")))
+        if base > 0:
+            lineas.append((id_contracuenta, descripcion, Decimal("0"), base))
+        if iva_5 > 0:
+            lineas.append((id_cta_iva_5, descripcion, Decimal("0"), iva_5))
+        if iva_10 > 0:
+            lineas.append((id_cta_iva_10, descripcion, Decimal("0"), iva_10))
+
+    return lineas
+
+
+def reconstruir_asiento_desde_comprobantes_iva(cur, id_cliente, id_asiento, usuario):
+    before_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+    if not before_asiento:
+        raise ValueError("No se encontró el asiento asociado al comprobante.")
+
+    cur.execute("""
+        SELECT
+            lic.id_comprobante_iva,
+            lic.tipo_libro,
+            lic.fecha,
+            lic.numero_comprobante,
+            lic.razon_social,
+            lic.detalle,
+            lic.id_cuenta,
+            lic.id_cta_iva_5,
+            lic.id_cta_iva_10,
+            lic.id_contracuenta,
+            lic.exento,
+            lic.gravado_5,
+            lic.iva_5,
+            lic.gravado_10,
+            lic.iva_10,
+            lic.total,
+            td.codigo AS documento_codigo
+        FROM libro_iva_comprobante lic
+        LEFT JOIN tipo_documento td
+          ON td.id_tipo_documento = lic.id_tipo_documento
+        WHERE lic.id_cliente = %s
+          AND lic.id_asiento = %s
+        ORDER BY lic.fecha, lic.id_comprobante_iva
+    """, (id_cliente, id_asiento))
+    comprobantes = cur.fetchall()
+
+    if not comprobantes:
+        cur.execute("""
+            SELECT id_linea
+            FROM asiento_linea
+            WHERE id_cliente = %s
+              AND id_asiento = %s
+        """, (id_cliente, id_asiento))
+        lineas_previas = [
+            fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (row[0],))
+            for row in cur.fetchall()
+        ]
+        cur.execute("""
+            DELETE FROM asiento_linea
+            WHERE id_cliente = %s
+              AND id_asiento = %s
+        """, (id_cliente, id_asiento))
+        for linea_previa in lineas_previas:
+            registrar_auditoria(cur, "asiento_linea", "DELETE", before=linea_previa, usuario=usuario)
+
+        cur.execute("""
+            DELETE FROM asiento
+            WHERE id_cliente = %s
+              AND id_asiento = %s
+        """, (id_cliente, id_asiento))
+        registrar_auditoria(cur, "asiento", "DELETE", before=before_asiento, usuario=usuario)
+        return {"eliminado": True}
+
+    tipos_libro = {(row[1] or "").strip().upper() for row in comprobantes if row[1]}
+    if len(tipos_libro) != 1:
+        raise ValueError("No se pueden mezclar comprobantes de compras y ventas en un mismo asiento.")
+
+    tipo_libro = next(iter(tipos_libro))
+    fecha_asiento = max(row[2] for row in comprobantes if row[2] is not None)
+    lineas_generadas = []
+    descripciones = []
+
+    for row in comprobantes:
+        descripcion = construir_descripcion_comprobante_iva(row[16], row[3], row[4], row[5])
+        descripciones.append(descripcion)
+        lineas_generadas.extend(
+            construir_lineas_comprobante_iva(
+                tipo_libro,
+                row[6],
+                row[7],
+                row[8],
+                row[9],
+                row[10] or Decimal("0"),
+                row[11] or Decimal("0"),
+                row[12] or Decimal("0"),
+                row[13] or Decimal("0"),
+                row[14] or Decimal("0"),
+                row[15] or Decimal("0"),
+                descripcion,
+            )
+        )
+
+    total_debe = sum((linea[2] for linea in lineas_generadas), Decimal("0"))
+    total_haber = sum((linea[3] for linea in lineas_generadas), Decimal("0"))
+    if total_debe != total_haber:
+        raise ValueError("El asiento agrupado no queda balanceado.")
+
+    descripcion_asiento = descripciones[0] if len(comprobantes) == 1 else ("Ventas varias" if tipo_libro == "VENTA" else "Compras varias")
+    datos_asiento = {
+        "fecha": fecha_asiento,
+        "descripcion": descripcion_asiento,
+        "referencia": tipo_libro,
+        "tipo_asiento": tipo_libro,
+    }
+    asignaciones_asiento, params_asiento = build_update_with_audit("asiento", datos_asiento, usuario)
+    cur.execute(
+        f"""
+        UPDATE asiento
+        SET {", ".join(asignaciones_asiento)}
+        WHERE id_cliente = %s
+          AND id_asiento = %s
+        """,
+        params_asiento + [id_cliente, id_asiento]
+    )
+    after_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+    registrar_auditoria(cur, "asiento", "UPDATE", before=before_asiento, after=after_asiento, usuario=usuario)
+
+    cur.execute("""
+        SELECT id_linea
+        FROM asiento_linea
+        WHERE id_cliente = %s
+          AND id_asiento = %s
+    """, (id_cliente, id_asiento))
+    lineas_previas = [
+        fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (row[0],))
+        for row in cur.fetchall()
+    ]
+    cur.execute("""
+        DELETE FROM asiento_linea
+        WHERE id_cliente = %s
+          AND id_asiento = %s
+    """, (id_cliente, id_asiento))
+    for linea_previa in lineas_previas:
+        registrar_auditoria(cur, "asiento_linea", "DELETE", before=linea_previa, usuario=usuario)
+
+    for id_cuenta_linea, glosa, debe, haber in lineas_generadas:
+        datos_linea = {
+            "id_asiento": id_asiento,
+            "id_cliente": id_cliente,
+            "id_cuenta": id_cuenta_linea,
+            "glosa": glosa,
+            "debe": debe,
+            "haber": haber,
+        }
+        columnas_linea, placeholders_linea, params_linea = build_insert_with_audit("asiento_linea", datos_linea, usuario)
+        cur.execute(
+            f"""
+            INSERT INTO asiento_linea
+            ({", ".join(columnas_linea)})
+            VALUES ({", ".join(placeholders_linea)})
+            RETURNING id_linea
+            """,
+            params_linea
+        )
+        id_linea = cur.fetchone()[0]
+        after_linea = fetch_row_dict(cur, "asiento_linea", "id_linea = %s", (id_linea,))
+        registrar_auditoria(cur, "asiento_linea", "INSERT", after=after_linea, usuario=usuario)
+
+    return {
+        "eliminado": False,
+        "id_asiento": id_asiento,
+        "numero_asiento": after_asiento.get("numero_asiento"),
+        "tipo_libro": tipo_libro,
+        "fecha": fecha_asiento,
+        "descripcion": descripcion_asiento,
+    }
+
+
+def guardar_libro_iva_impl(id_cliente):
+    id_comprobante_iva = request.form.get("id_comprobante_iva", type=int)
+    agrupar_en_asiento = request.form.get("agrupar_en_asiento", "").strip() in ("1", "true", "True", "on")
+    id_asiento_grupo = request.form.get("id_asiento_grupo", type=int)
+    usuario = get_current_username()
+
+    try:
+        fecha = request.form.get("fecha", "").strip()
+        id_tipo_documento = int(request.form.get("sigla") or 0)
+        id_tipo_iva = int(request.form.get("id_tipo_iva") or 0)
+        numero_comprobante = request.form.get("numero", "").strip()
+        condicion = request.form.get("condicion", "").strip()
+        ruc = request.form.get("ruc", "").strip()
+        razon_social = request.form.get("nombre_razon", "").strip()
+        detalle = request.form.get("detalle", "").strip()
+        moneda = request.form.get("moneda", "GS.").strip()
+        tipo_cambio = decimal_form(request.form.get("tipo_cambio", "1"), "1")
+
+        id_cuenta = int(request.form.get("cuenta_id") or 0)
+        id_cta_iva_5 = int(request.form.get("cta_iva_5_id") or 0) or None
+        id_cta_iva_10 = int(request.form.get("cta_iva_10_id") or 0) or None
+        id_contracuenta = int(request.form.get("contracuenta_id") or 0)
+
+        exento = decimal_form(request.form.get("exento", "0"))
+        gravado_5 = decimal_form(request.form.get("gravado_5", "0"))
+        iva_5 = decimal_form(request.form.get("iva_5", "0"))
+        gravado_10 = decimal_form(request.form.get("gravado_10", "0"))
+        iva_10 = decimal_form(request.form.get("iva_10", "0"))
+        total = decimal_form(request.form.get("total", "0"))
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Datos inválidos en el comprobante"}), 400
+
+    if not fecha:
+        return jsonify({"ok": False, "error": "La fecha es obligatoria"}), 400
+    try:
+        fecha_comprobante = date.fromisoformat(fecha)
+    except ValueError:
+        return jsonify({"ok": False, "error": "La fecha no es válida"}), 400
+
+    if fecha_comprobante > date.today():
+        return jsonify({"ok": False, "error": "No se puede cargar una factura con fecha futura", "field": "fecha"}), 400
+    if not numero_comprobante:
+        return jsonify({"ok": False, "error": "El número de comprobante es obligatorio"}), 400
+    if not id_tipo_documento:
+        return jsonify({"ok": False, "error": "Debe seleccionar el tipo de comprobante"}), 400
+    if not id_tipo_iva:
+        return jsonify({"ok": False, "error": "Debe seleccionar el tipo de IVA"}), 400
+    if not id_cuenta:
+        return jsonify({"ok": False, "error": "Debe completar una cuenta válida", "field": "cuenta_codigo"}), 400
+    if not id_contracuenta:
+        return jsonify({"ok": False, "error": "Debe completar una contracuenta válida", "field": "contracuenta_codigo"}), 400
+    if not cuenta_imputable_existe(id_cliente, id_cuenta):
+        return jsonify({"ok": False, "error": "La cuenta no existe en el plan de cuentas de este cliente", "field": "cuenta_codigo"}), 400
+    if not cuenta_imputable_existe(id_cliente, id_contracuenta):
+        return jsonify({"ok": False, "error": "La contracuenta no existe en el plan de cuentas de este cliente", "field": "contracuenta_codigo"}), 400
+    if iva_5 > 0 and not id_cta_iva_5:
+        return jsonify({"ok": False, "error": "Debe completar la cuenta de IVA 5%", "field": "cta_iva_5_codigo"}), 400
+    if iva_5 > 0 and not cuenta_imputable_existe(id_cliente, id_cta_iva_5):
+        return jsonify({"ok": False, "error": "La cuenta de IVA 5% no existe en el plan de cuentas de este cliente", "field": "cta_iva_5_codigo"}), 400
+    if iva_10 > 0 and not id_cta_iva_10:
+        return jsonify({"ok": False, "error": "Debe completar la cuenta de IVA 10%", "field": "cta_iva_10_codigo"}), 400
+    if iva_10 > 0 and not cuenta_imputable_existe(id_cliente, id_cta_iva_10):
+        return jsonify({"ok": False, "error": "La cuenta de IVA 10% no existe en el plan de cuentas de este cliente", "field": "cta_iva_10_codigo"}), 400
+
+    base = exento + gravado_5 + gravado_10
+    total_calculado = base + iva_5 + iva_10
+    if total == 0:
+        total = total_calculado
+    if total <= 0:
+        return jsonify({"ok": False, "error": "El total debe ser mayor a cero"}), 400
+
+    documento_codigo = ""
+    tipo_iva_denominacion = ""
+    tipo_libro = ""
+    id_asiento = None
+    numero_asiento = None
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'libro_iva_comprobante'
+                """)
+                columnas = {row[0] for row in cur.fetchall()}
+                if not columnas:
+                    raise RuntimeError("No existe la tabla libro_iva_comprobante")
+
+                cur.execute("SELECT codigo FROM tipo_documento WHERE id_tipo_documento = %s", (id_tipo_documento,))
+                row_tipo_documento = cur.fetchone()
+                documento_codigo = row_tipo_documento[0] if row_tipo_documento else ""
+
+                cur.execute("SELECT denominacion, aplica_libro FROM tipo_iva WHERE id_tipo_iva = %s", (id_tipo_iva,))
+                row_tipo_iva = cur.fetchone()
+                tipo_iva_denominacion = row_tipo_iva[0] if row_tipo_iva else ""
+                tipo_libro = (row_tipo_iva[1] or "").strip().upper() if row_tipo_iva else ""
+                if tipo_libro not in ("COMPRA", "VENTA"):
+                    return jsonify({"ok": False, "error": "El tipo de IVA seleccionado no define si el comprobante es compra o venta"}), 400
+
+                descripcion = construir_descripcion_comprobante_iva(documento_codigo or tipo_libro, numero_comprobante, razon_social, detalle)
+
+                if id_comprobante_iva:
+                    before_comprobante = fetch_row_dict(cur, "libro_iva_comprobante", "id_cliente = %s AND id_comprobante_iva = %s", (id_cliente, id_comprobante_iva))
+                    cur.execute("""
+                        SELECT id_asiento
+                        FROM libro_iva_comprobante
+                        WHERE id_cliente = %s
+                          AND id_comprobante_iva = %s
+                    """, (id_cliente, id_comprobante_iva))
+                    row_existente = cur.fetchone()
+                    if not row_existente:
+                        return jsonify({"ok": False, "error": "No se encontró el comprobante a modificar"}), 404
+                    id_asiento = row_existente[0]
+                else:
+                    if agrupar_en_asiento and id_asiento_grupo:
+                        cur.execute("""
+                            SELECT id_asiento, numero_asiento, tipo_asiento
+                            FROM asiento
+                            WHERE id_cliente = %s
+                              AND id_asiento = %s
+                        """, (id_cliente, id_asiento_grupo))
+                        row_grupo = cur.fetchone()
+                        if not row_grupo:
+                            return jsonify({"ok": False, "error": "El asiento agrupado actual ya no existe. Desmarque la opción y vuelva a intentar."}), 400
+                        id_asiento = row_grupo[0]
+                        numero_asiento = row_grupo[1]
+                        tipo_asiento_existente = (row_grupo[2] or "").strip().upper()
+                        if tipo_asiento_existente and tipo_asiento_existente != tipo_libro:
+                            return jsonify({"ok": False, "error": "No se pueden mezclar compras y ventas dentro del mismo asiento agrupado."}), 400
+                    else:
+                        cur.execute("""
+                            SELECT COALESCE(MAX(numero_asiento), 0) + 1
+                            FROM asiento
+                            WHERE id_cliente = %s
+                        """, (id_cliente,))
+                        numero_asiento = cur.fetchone()[0]
+                        datos_asiento = {
+                            "id_cliente": id_cliente,
+                            "numero_asiento": numero_asiento,
+                            "fecha": fecha,
+                            "descripcion": descripcion,
+                            "referencia": tipo_libro,
+                            "estado": "BORRADOR",
+                            "tipo_asiento": tipo_libro,
+                        }
+                        columnas_asiento, placeholders_asiento, params_asiento = build_insert_with_audit("asiento", datos_asiento, usuario)
+                        cur.execute(
+                            f"""
+                            INSERT INTO asiento
+                            ({", ".join(columnas_asiento)})
+                            VALUES ({", ".join(placeholders_asiento)})
+                            RETURNING id_asiento
+                            """,
+                            params_asiento
+                        )
+                        id_asiento = cur.fetchone()[0]
+                        after_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
+                        registrar_auditoria(cur, "asiento", "INSERT", after=after_asiento, usuario=usuario)
+
+                datos_comprobante = {
+                    "id_cliente": id_cliente,
+                    "id_asiento": id_asiento,
+                    "tipo_libro": tipo_libro,
+                    "id_tipo_documento": id_tipo_documento,
+                    "id_tipo_iva": id_tipo_iva or None,
+                    "fecha": fecha,
+                    "condicion": condicion or None,
+                    "numero_comprobante": numero_comprobante,
+                    "ruc": ruc or None,
+                    "razon_social": razon_social or None,
+                    "id_cuenta": id_cuenta,
+                    "id_cta_iva_5": id_cta_iva_5,
+                    "id_cta_iva_10": id_cta_iva_10,
+                    "id_contracuenta": id_contracuenta,
+                    "detalle": detalle or None,
+                    "moneda": moneda,
+                    "tipo_cambio": tipo_cambio,
+                    "exento": exento,
+                    "gravado_5": gravado_5,
+                    "iva_5": iva_5,
+                    "gravado_10": gravado_10,
+                    "iva_10": iva_10,
+                    "total": total,
+                    "estado": "BORRADOR",
+                }
+                datos_comprobante = {columna: valor for columna, valor in datos_comprobante.items() if columna in columnas}
+
+                if id_comprobante_iva:
+                    asignaciones, params = build_update_with_audit("libro_iva_comprobante", datos_comprobante, usuario)
+                    cur.execute(
+                        f"""
+                        UPDATE libro_iva_comprobante
+                        SET {", ".join(asignaciones)}
+                        WHERE id_cliente = %s
+                          AND id_comprobante_iva = %s
+                        """,
+                        params + [id_cliente, id_comprobante_iva]
+                    )
+                    after_comprobante = fetch_row_dict(cur, "libro_iva_comprobante", "id_cliente = %s AND id_comprobante_iva = %s", (id_cliente, id_comprobante_iva))
+                    registrar_auditoria(cur, "libro_iva_comprobante", "UPDATE", before=before_comprobante, after=after_comprobante, usuario=usuario)
+                else:
+                    columnas_insert, placeholders_lista, valores_insert = build_insert_with_audit("libro_iva_comprobante", datos_comprobante, usuario)
+                    cur.execute(
+                        f"""
+                        INSERT INTO libro_iva_comprobante ({", ".join(columnas_insert)})
+                        VALUES ({", ".join(placeholders_lista)})
+                        RETURNING id_comprobante_iva
+                        """,
+                        valores_insert
+                    )
+                    id_comprobante_iva = cur.fetchone()[0]
+                    after_comprobante = fetch_row_dict(cur, "libro_iva_comprobante", "id_cliente = %s AND id_comprobante_iva = %s", (id_cliente, id_comprobante_iva))
+                    registrar_auditoria(cur, "libro_iva_comprobante", "INSERT", after=after_comprobante, usuario=usuario)
+
+                resultado_asiento = reconstruir_asiento_desde_comprobantes_iva(cur, id_cliente, id_asiento, usuario)
+                if resultado_asiento.get("eliminado"):
+                    return jsonify({"ok": False, "error": "El asiento agrupado quedó sin comprobantes asociados"}), 400
+
+                numero_asiento = resultado_asiento["numero_asiento"]
+                conn.commit()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({
+        "ok": True,
+        "id_asiento": id_asiento,
+        "numero_asiento": numero_asiento,
+        "id_comprobante_iva": id_comprobante_iva,
+        "comprobante": {
+            "id_comprobante_iva": id_comprobante_iva,
+            "id_asiento": id_asiento,
+            "numero_asiento": numero_asiento,
+            "tipo_libro": tipo_libro,
+            "id_tipo_documento": id_tipo_documento,
+            "id_tipo_iva": id_tipo_iva or None,
+            "documento_codigo": documento_codigo or tipo_libro,
+            "fecha": fecha,
+            "numero_comprobante": numero_comprobante,
+            "comprobante": f"{(documento_codigo or tipo_libro)}-{numero_comprobante}",
+            "condicion": condicion,
+            "ruc": ruc,
+            "razon_social": razon_social,
+            "id_cuenta": id_cuenta,
+            "cuenta_codigo": request.form.get("cuenta_codigo", "").strip(),
+            "cuenta_nombre": request.form.get("cuenta_nombre", "").strip(),
+            "id_cta_iva_5": id_cta_iva_5,
+            "cta_iva_5_codigo": request.form.get("cta_iva_5", "").strip() or request.form.get("cta_iva_5_codigo", "").strip(),
+            "cta_iva_5_nombre": request.form.get("cta_iva_5_nombre", "").strip(),
+            "id_cta_iva_10": id_cta_iva_10,
+            "cta_iva_10_codigo": request.form.get("cta_iva_10", "").strip() or request.form.get("cta_iva_10_codigo", "").strip(),
+            "cta_iva_10_nombre": request.form.get("cta_iva_10_nombre", "").strip(),
+            "id_contracuenta": id_contracuenta,
+            "contracuenta_codigo": request.form.get("contracuenta", "").strip() or request.form.get("contracuenta_codigo", "").strip(),
+            "contracuenta_nombre": request.form.get("contracuenta_nombre", "").strip(),
+            "detalle": detalle,
+            "exento": str(exento),
+            "gravado_5": str(gravado_5),
+            "iva_5": str(iva_5),
+            "gravado_10": str(gravado_10),
+            "iva_10": str(iva_10),
+            "total": str(total),
+            "moneda": moneda,
+            "tipo_cambio": str(tipo_cambio),
+            "tipo_iva_denominacion": tipo_iva_denominacion
+        }
+    })
+
 
 
 def fetch_libro_compras_ventas(id_cliente, tipo_libro, fecha_desde=None, fecha_hasta=None):
@@ -2577,7 +3073,7 @@ def libro_iva(id_cliente):
         tipo = (fetch_tipo_asiento(id_cliente, id_asiento_seleccionado) or "").strip().upper()
 
     if tipo not in ("COMPRA", "VENTA"):
-        tipo = "COMPRA"
+        tipo = "TODOS"
 
     tipos_documento = fetch_tipos_documento(tipo)
     tipos_iva = fetch_tipos_iva(tipo)
@@ -2597,6 +3093,9 @@ def libro_iva(id_cliente):
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/libro-iva/guardar", methods=["POST"])
 def guardar_libro_iva(id_cliente):
+    return guardar_libro_iva_impl(id_cliente)
+    '''
+
     tipo_libro = request.form.get("tipo_libro", "COMPRA").strip().upper()
     id_comprobante_iva = request.form.get("id_comprobante_iva", type=int)
     usuario = get_current_username()
@@ -2940,6 +3439,61 @@ def guardar_libro_iva(id_cliente):
             "tipo_cambio": str(tipo_cambio),
             "tipo_iva_denominacion": tipo_iva_denominacion
         }
+    })
+
+
+'''
+
+@app.route("/cliente/<int:id_cliente>/contabilidad/libro-iva/<int:id_comprobante_iva>/eliminar", methods=["POST"])
+def eliminar_comprobante_libro_iva(id_cliente, id_comprobante_iva):
+    usuario = get_current_username()
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                before_comprobante = fetch_row_dict(
+                    cur,
+                    "libro_iva_comprobante",
+                    "id_cliente = %s AND id_comprobante_iva = %s",
+                    (id_cliente, id_comprobante_iva),
+                )
+                if not before_comprobante:
+                    return jsonify({"ok": False, "error": "No se encontró el comprobante a eliminar"}), 404
+
+                id_asiento = before_comprobante.get("id_asiento")
+                tipo_libro = (before_comprobante.get("tipo_libro") or "").strip().upper()
+
+                cur.execute("""
+                    DELETE FROM libro_iva_comprobante
+                    WHERE id_cliente = %s
+                      AND id_comprobante_iva = %s
+                """, (id_cliente, id_comprobante_iva))
+                registrar_auditoria(cur, "libro_iva_comprobante", "DELETE", before=before_comprobante, usuario=usuario)
+
+                resultado = reconstruir_asiento_desde_comprobantes_iva(cur, id_cliente, id_asiento, usuario)
+
+                comprobantes_restantes = 0
+                if not resultado.get("eliminado"):
+                    cur.execute("""
+                        SELECT COUNT(*)
+                        FROM libro_iva_comprobante
+                        WHERE id_cliente = %s
+                          AND id_asiento = %s
+                    """, (id_cliente, id_asiento))
+                    comprobantes_restantes = cur.fetchone()[0]
+
+                conn.commit()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({
+        "ok": True,
+        "id_comprobante_iva": id_comprobante_iva,
+        "id_asiento": id_asiento,
+        "tipo_libro": tipo_libro,
+        "asiento_eliminado": bool(resultado.get("eliminado")),
+        "numero_asiento": None if resultado.get("eliminado") else resultado.get("numero_asiento"),
+        "comprobantes_restantes": comprobantes_restantes,
     })
 
 @app.route("/cliente/<int:id_cliente>/buscar-cuentas")

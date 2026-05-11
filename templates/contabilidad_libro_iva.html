@@ -36,6 +36,7 @@
             "id_comprobante_iva": comprobante.id_comprobante_iva,
             "id_asiento": comprobante.id_asiento,
             "numero_asiento": comprobante.numero_asiento,
+            "tipo_libro": comprobante.tipo_libro or '',
             "id_tipo_documento": comprobante.id_tipo_documento,
             "id_tipo_iva": comprobante.id_tipo_iva,
             "documento_codigo": comprobante.documento_codigo,
@@ -110,22 +111,19 @@
       </table>
     </div>
 
-    <div class="iva-book-scrollbar" aria-hidden="true">
-      <span></span>
-    </div>
-
     <div class="iva-book-footer">
       <div class="iva-book-footer-left">
         <label class="iva-book-lines">
-          <input class="form-check-input" type="checkbox" checked>
-          Líneas
+          <input class="form-check-input" type="checkbox" id="agruparMismoAsiento">
+          Cargar en un solo asiento
         </label>
-        <button class="iva-book-help" type="button">?</button>
-        <button class="iva-book-button" type="button">Mostrar Todos</button>
+        <span class="iva-book-group-status" id="grupoAsientoStatus">Cada comprobante generarÃ¡ su propio asiento.</span>
       </div>
 
       <div class="iva-book-footer-right">
+        <button class="iva-book-help" type="button">?</button>
         <button class="iva-book-button" type="button">Buscar</button>
+        <button class="iva-book-button" type="button">Mostrar Todos</button>
         <button class="iva-book-button"
                 type="button"
                 id="btnAgregarIva"
@@ -133,10 +131,8 @@
                 data-bs-target="#modalComprobanteIva">
           Agregar
         </button>
-        <button class="iva-book-button" type="button">Eliminar</button>
+        <button class="iva-book-button" type="button" id="btnEliminarIva">Eliminar</button>
         <button class="iva-book-button" type="button" id="btnModificarIva">Modificar</button>
-        <button class="iva-book-button" type="button">Incluir</button>
-        <button class="iva-book-button" type="button">Excluir</button>
         <button class="iva-book-button" type="button">Imprimir</button>
         <a class="iva-book-button iva-book-link"
            href="{{ url_for('asiento_diario', id_cliente=id_cliente) }}">
@@ -285,6 +281,8 @@
         <form id="formComprobanteIva">
           <input type="hidden" name="tipo_libro" value="{{ tipo }}">
           <input type="hidden" name="id_comprobante_iva" id="id_comprobante_iva">
+          <input type="hidden" name="agrupar_en_asiento" id="agrupar_en_asiento" value="0">
+          <input type="hidden" name="id_asiento_grupo" id="id_asiento_grupo" value="">
           <div class="iva-modal-grid">
             <div class="iva-modal-row iva-modal-row-top">
               <div class="iva-modal-label">Comprobante</div>
@@ -342,6 +340,7 @@
                   <option value="{{ tipo_iva.id_tipo_iva }}"
                           data-cuenta-iva-5="{{ tipo_iva.cuenta_iva_5_codigo or '' }}"
                           data-cuenta-iva-10="{{ tipo_iva.cuenta_iva_10_codigo or '' }}"
+                          data-aplica-libro="{{ tipo_iva.aplica_libro or '' }}"
                           data-incluido="{{ '1' if tipo_iva.incluido else '0' }}">
                     {{ tipo_iva.denominacion }}
                   </option>
@@ -585,13 +584,18 @@ document.addEventListener("DOMContentLoaded", function () {
     const form = document.getElementById("formComprobanteIva");
     const selectSigla = form ? form.querySelector("[name='sigla']") : null;
     const btnAgregarIva = document.getElementById("btnAgregarIva");
+    const btnEliminarIva = document.getElementById("btnEliminarIva");
     const btnModificarIva = document.getElementById("btnModificarIva");
     const btnGuardar = document.getElementById("btnGuardarIva");
     const btnTerminar = document.getElementById("btnTerminarIva");
+    const agruparMismoAsiento = document.getElementById("agruparMismoAsiento");
+    const grupoAsientoStatus = document.getElementById("grupoAsientoStatus");
     const tipoIvaSelect = document.getElementById("tipoIvaSelect");
     const ivaIncluido = document.getElementById("ivaIncluido");
     const fechaComprobante = form ? form.querySelector("input[name='fecha']") : null;
     const idComprobanteIva = document.getElementById("id_comprobante_iva");
+    const agruparEnAsientoInput = document.getElementById("agrupar_en_asiento");
+    const idAsientoGrupoInput = document.getElementById("id_asiento_grupo");
     const monedaSelect = form ? form.querySelector("[name='moneda']") : null;
     const inputCuenta = document.getElementById("cuenta_codigo");
     const listaCuenta = document.getElementById("cuenta_lista");
@@ -631,6 +635,13 @@ document.addEventListener("DOMContentLoaded", function () {
     let rucLookupVersion = 0;
     let rucPendienteAlta = "";
     let personaRefActual = null;
+    const storageGrupoKey = "iva-grupo-{{ id_cliente }}";
+    let grupoAsientoActual = {
+        activo: false,
+        id_asiento: null,
+        numero_asiento: null,
+        tipo_libro: ""
+    };
     const cuentaCampos = [
         { inputId: "cuenta_codigo", hiddenId: "cuenta_id", label: "Cuenta", requerido: () => true },
         { inputId: "contracuenta_codigo", hiddenId: "contracuenta_id", label: "Contracuenta", requerido: () => true },
@@ -693,6 +704,71 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     const hayCambiosPendientes = () => snapshotFormulario() !== estadoInicial;
+    const obtenerTipoLibroSeleccionado = () => {
+        const option = tipoIvaSelect?.selectedOptions?.[0];
+        return (option?.dataset.aplicaLibro || "").toUpperCase();
+    };
+    const persistirGrupoAsiento = () => {
+        try {
+            sessionStorage.setItem(storageGrupoKey, JSON.stringify(grupoAsientoActual));
+        } catch (error) {
+            console.warn("No se pudo persistir el asiento agrupado.", error);
+        }
+    };
+    const actualizarUIGrupoAsiento = () => {
+        if (agruparMismoAsiento) {
+            agruparMismoAsiento.checked = !!grupoAsientoActual.activo;
+        }
+        if (agruparEnAsientoInput) {
+            agruparEnAsientoInput.value = grupoAsientoActual.activo ? "1" : "0";
+        }
+        if (idAsientoGrupoInput) {
+            idAsientoGrupoInput.value = grupoAsientoActual.id_asiento || "";
+        }
+        if (grupoAsientoStatus) {
+            if (!grupoAsientoActual.activo) {
+                grupoAsientoStatus.textContent = "Cada comprobante generará su propio asiento.";
+            } else if (grupoAsientoActual.numero_asiento) {
+                grupoAsientoStatus.textContent = `Asiento agrupado actual: N° ${grupoAsientoActual.numero_asiento} (${grupoAsientoActual.tipo_libro || "IVA"}).`;
+            } else {
+                grupoAsientoStatus.textContent = "El próximo comprobante abrirá un asiento agrupado.";
+            }
+        }
+    };
+    const resetearGrupoAsiento = () => {
+        grupoAsientoActual = {
+            activo: false,
+            id_asiento: null,
+            numero_asiento: null,
+            tipo_libro: ""
+        };
+        persistirGrupoAsiento();
+        actualizarUIGrupoAsiento();
+    };
+    const cargarGrupoAsientoPersistido = () => {
+        try {
+            const raw = sessionStorage.getItem(storageGrupoKey);
+            if (!raw) {
+                actualizarUIGrupoAsiento();
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            grupoAsientoActual = {
+                activo: !!parsed?.activo,
+                id_asiento: parsed?.id_asiento || null,
+                numero_asiento: parsed?.numero_asiento || null,
+                tipo_libro: parsed?.tipo_libro || ""
+            };
+        } catch (error) {
+            grupoAsientoActual = {
+                activo: false,
+                id_asiento: null,
+                numero_asiento: null,
+                tipo_libro: ""
+            };
+        }
+        actualizarUIGrupoAsiento();
+    };
     const esMonedaGuaranies = () => (monedaSelect?.value || "GS.").toUpperCase() === "GS.";
     const redondearMonto = (valor) => {
         const numero = parseMonto(valor);
@@ -887,6 +963,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const abrirModalNuevo = () => {
         limpiarFormulario();
         if (idComprobanteIva) idComprobanteIva.value = "";
+        actualizarUIGrupoAsiento();
         setTituloModal(false);
         aplicarTipoIva();
         estadoInicial = snapshotFormulario();
@@ -926,6 +1003,48 @@ document.addEventListener("DOMContentLoaded", function () {
             <td>${comprobante.tipo_iva_denominacion || ""}</td>
         `;
         seleccionarFila(row);
+    };
+
+    const quitarFilaComprobante = (idComprobante) => {
+        if (!ivaBookTableBody || !idComprobante) return;
+        const fila = ivaBookTableBody.querySelector(`tr[data-id-comprobante="${idComprobante}"]`);
+        if (!fila) return;
+
+        const siguienteFila = fila.nextElementSibling?.classList.contains("iva-book-data-row")
+            ? fila.nextElementSibling
+            : (fila.previousElementSibling?.classList.contains("iva-book-data-row") ? fila.previousElementSibling : null);
+
+        fila.remove();
+
+        const filasActuales = ivaBookTableBody.querySelectorAll("tr");
+        if (filasActuales.length < 28) {
+            const vacia = document.createElement("tr");
+            vacia.innerHTML = `
+                <td>&nbsp;</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td class="text-end"></td>
+                <td class="text-end"></td>
+                <td class="text-end"></td>
+                <td class="text-end"></td>
+                <td class="text-end"></td>
+                <td class="text-end"></td>
+                <td></td>
+                <td class="text-end"></td>
+                <td></td>
+            `;
+            ivaBookTableBody.appendChild(vacia);
+        }
+
+        if (filaSeleccionada === fila) {
+            filaSeleccionada = null;
+            comprobanteSeleccionado = null;
+            if (siguienteFila) {
+                seleccionarFila(siguienteFila);
+            }
+        }
     };
 
     const agregarComprobanteAGrilla = (comprobante) => {
@@ -1088,9 +1207,23 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    if (agruparMismoAsiento) {
+        agruparMismoAsiento.addEventListener("change", function () {
+            if (this.checked) {
+                grupoAsientoActual.activo = true;
+            } else {
+                resetearGrupoAsiento();
+                return;
+            }
+            persistirGrupoAsiento();
+            actualizarUIGrupoAsiento();
+        });
+    }
+
     if (form) {
         estadoInicial = snapshotFormulario();
     }
+    cargarGrupoAsientoPersistido();
 
     [exento, gravado5, gravado10].forEach((input) => {
         if (input) {
@@ -1176,6 +1309,23 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
+            const tipoLibroSeleccionado = obtenerTipoLibroSeleccionado();
+            if (agruparMismoAsiento?.checked && grupoAsientoActual.id_asiento && grupoAsientoActual.tipo_libro && tipoLibroSeleccionado && grupoAsientoActual.tipo_libro !== tipoLibroSeleccionado) {
+                Swal.fire({
+                    icon: "warning",
+                    title: "Asiento agrupado activo",
+                    text: "No podemos mezclar compras y ventas en el mismo asiento. Desmarque la opciÃ³n o cierre el asiento agrupado actual."
+                });
+                return;
+            }
+
+            if (agruparEnAsientoInput) {
+                agruparEnAsientoInput.value = agruparMismoAsiento?.checked ? "1" : "0";
+            }
+            if (idAsientoGrupoInput) {
+                idAsientoGrupoInput.value = agruparMismoAsiento?.checked ? (grupoAsientoActual.id_asiento || "") : "";
+            }
+
             btnGuardar.disabled = true;
 
             fetch("{{ url_for('guardar_libro_iva', id_cliente=id_cliente) }}", {
@@ -1194,6 +1344,16 @@ document.addEventListener("DOMContentLoaded", function () {
                 .then((data) => {
                     const selectedTipoIvaText = tipoIvaSelect ? tipoIvaSelect.options[tipoIvaSelect.selectedIndex]?.textContent.trim() : "";
                     data.comprobante.tipo_iva_denominacion = selectedTipoIvaText || data.comprobante.tipo_iva_denominacion || "";
+                    if (agruparMismoAsiento?.checked) {
+                        grupoAsientoActual = {
+                            activo: true,
+                            id_asiento: data.id_asiento || null,
+                            numero_asiento: data.numero_asiento || null,
+                            tipo_libro: data.comprobante.tipo_libro || tipoLibroSeleccionado || ""
+                        };
+                        persistirGrupoAsiento();
+                        actualizarUIGrupoAsiento();
+                    }
                     agregarComprobanteAGrilla(data.comprobante);
                     Swal.fire({
                         icon: "success",
@@ -1203,6 +1363,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         showConfirmButton: false
                     }).then(() => {
                         limpiarFormulario();
+                        actualizarUIGrupoAsiento();
                         if (inputCuenta) {
                             inputCuenta.focus();
                         }
@@ -1253,6 +1414,74 @@ document.addEventListener("DOMContentLoaded", function () {
     if (btnModificarIva) {
         btnModificarIva.addEventListener("click", function () {
             abrirModalModificar();
+        });
+    }
+
+    if (btnEliminarIva) {
+        btnEliminarIva.addEventListener("click", function () {
+            if (!comprobanteSeleccionado?.id_comprobante_iva) {
+                Swal.fire({
+                    icon: "warning",
+                    title: "Seleccione un comprobante",
+                    text: "Primero elija una fila del libro IVA para poder eliminarla."
+                });
+                return;
+            }
+
+            Swal.fire({
+                icon: "warning",
+                title: "Eliminar comprobante",
+                text: "Esta acción eliminará el comprobante y actualizará el asiento relacionado.",
+                showCancelButton: true,
+                confirmButtonText: "Eliminar",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#d33"
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                fetch(`{{ url_for('eliminar_comprobante_libro_iva', id_cliente=id_cliente, id_comprobante_iva=0) }}`.replace("/0/eliminar", `/${comprobanteSeleccionado.id_comprobante_iva}/eliminar`), {
+                    method: "POST"
+                })
+                    .then(async (response) => {
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || !data.ok) {
+                            throw new Error(data.error || "No se pudo eliminar el comprobante.");
+                        }
+                        return data;
+                    })
+                    .then((data) => {
+                        quitarFilaComprobante(data.id_comprobante_iva);
+
+                        if (grupoAsientoActual.id_asiento && grupoAsientoActual.id_asiento === data.id_asiento) {
+                            if (data.asiento_eliminado || !data.comprobantes_restantes) {
+                                resetearGrupoAsiento();
+                            } else {
+                                grupoAsientoActual = {
+                                    activo: !!agruparMismoAsiento?.checked,
+                                    id_asiento: data.id_asiento,
+                                    numero_asiento: data.numero_asiento || grupoAsientoActual.numero_asiento,
+                                    tipo_libro: data.tipo_libro || grupoAsientoActual.tipo_libro
+                                };
+                                persistirGrupoAsiento();
+                                actualizarUIGrupoAsiento();
+                            }
+                        }
+
+                        Swal.fire({
+                            icon: "success",
+                            title: "Comprobante eliminado",
+                            timer: 1400,
+                            showConfirmButton: false
+                        });
+                    })
+                    .catch((error) => {
+                        Swal.fire({
+                            icon: "error",
+                            title: "No se pudo eliminar",
+                            text: error.message
+                        });
+                    });
+            });
         });
     }
 
@@ -1361,6 +1590,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (ivaIncluido) {
             ivaIncluido.value = selected.dataset.incluido || "0";
+        }
+
+        const tipoLibroInput = form?.querySelector("[name='tipo_libro']");
+        if (tipoLibroInput) {
+            tipoLibroInput.value = selected.dataset.aplicaLibro || "";
         }
 
         completarCuentaPorCodigo("cta_iva_5_codigo", selected.dataset.cuentaIva5 || "");

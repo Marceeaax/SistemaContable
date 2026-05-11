@@ -5,10 +5,115 @@
 <style>
 @page {
   size: A4 {{ 'landscape' if pdf_orientation == 'landscape' else 'portrait' }};
-  margin: 12mm;
+  margin: 9mm 10mm;
+}
+
+nav.navbar,
+#loginModal,
+.container > .alert,
+.libro-mayor-page,
+script[src*="bootstrap"],
+script[src*="sweetalert2"] {
+  display: none !important;
+}
+
+body.bg-light {
+  background: #fff !important;
+}
+
+.container.py-4 {
+  max-width: none !important;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.mayor-print-sheet{
+  background: #fff;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8px;
+  line-height: 1.1;
+}
+
+.mayor-print-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #4b5563;
+}
+
+.mayor-print-header h1{
+  margin: 0 0 2px 0;
+  font-size: 14px;
+  letter-spacing: .02em;
+  font-weight: 700;
+}
+
+.mayor-print-periodo,
+.mayor-print-cliente{
+  font-size: 7px;
+  font-weight: 600;
+}
+
+.mayor-print-table{
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.mayor-print-table th,
+.mayor-print-table td{
+  padding: 1px 2px;
+  vertical-align: top;
+  border: 0;
+}
+
+.mayor-print-table thead th{
+  border-bottom: 1px solid #111827;
+  text-align: left;
+  font-size: 6.7px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mayor-print-table thead th:nth-child(1){ width: 42px; }
+.mayor-print-table thead th:nth-child(2){ width: 24px; }
+.mayor-print-table thead th:nth-child(3){ width: {{ '64px' if pdf_orientation == 'portrait' else '98px' }}; }
+.mayor-print-table thead th:nth-child(5),
+.mayor-print-table thead th:nth-child(6),
+.mayor-print-table thead th:nth-child(7){ width: {{ '52px' if pdf_orientation == 'portrait' else '70px' }}; }
+
+.mayor-print-master-table{
+  font-size: {{ '6.8px' if pdf_orientation == 'portrait' else '7.6px' }};
+}
+
+.mayor-print-account-row td{
+  padding-top: 4px;
+  padding-bottom: 2px;
+  border-top: 1px solid #111827;
+  font-size: {{ '7.4px' if pdf_orientation == 'portrait' else '8.4px' }};
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mayor-print-table tbody td:nth-child(4){
+  overflow-wrap: break-word;
+  word-break: normal;
+  padding-right: 4px;
+}
+
+.mayor-print-table tbody td:nth-child(5),
+.mayor-print-table tbody td:nth-child(6),
+.mayor-print-table tbody td:nth-child(7){
+  text-align: right;
+  white-space: nowrap;
 }
 </style>
-<div class="mayor-print-sheet">
+<div class="mayor-print-sheet{% if pdf_orientation == 'portrait' %} mayor-print-sheet-compact{% endif %}">
   <div class="mayor-print-header">
     <div>
       <h1>LIBRO MAYOR</h1>
@@ -20,51 +125,37 @@
   </div>
 
   {% if libro %}
-  <div class="mayor-print-columns">
-    <div>Fecha</div>
-    <div>Asiento</div>
-    <div>Comprobante</div>
-    <div>Detalle / concepto del asiento</div>
-    <div>Moneda Origen</div>
-    <div class="text-end">DEBITOS</div>
-    <div class="text-end">CREDITOS</div>
-    <div class="text-end">S A L D O</div>
-  </div>
-
-  {% for cuenta in libro %}
-  <section class="mayor-print-cuenta">
-    <div class="mayor-print-cuenta-head">
-      <div class="mayor-print-codigo">{{ cuenta.codigo }}</div>
-      <div class="mayor-print-denominacion">{{ cuenta.denominacion }}</div>
-      <div class="mayor-print-saldo-anterior-label">Saldo anterior</div>
-      <div class="mayor-print-saldo-anterior-valor">{{ format_amount_display(cuenta.saldo_anterior, 'GS.') or '0' }}</div>
-    </div>
-
-    {% for mov in cuenta.movimientos %}
-    <div class="mayor-print-row">
-      <div>{{ mov.fecha.strftime('%d/%m/%y') if mov.fecha else '' }}</div>
-      <div>{{ mov.numero_asiento or '' }}</div>
-      <div>{{ mov.referencia or mov.tipo_asiento or '' }}</div>
-      <div>{{ mov.descripcion or '' }}</div>
-      <div></div>
-      <div class="text-end">{{ format_amount_display(mov.debe, 'GS.') if mov.debe else '' }}</div>
-      <div class="text-end">{{ format_amount_display(mov.haber, 'GS.') if mov.haber else '' }}</div>
-      <div class="text-end">{{ format_amount_display(mov.saldo, 'GS.') }}</div>
-    </div>
-    {% endfor %}
-
-    <div class="mayor-print-totales">
-      <div></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div class="text-end">{{ format_amount_display(cuenta.total_debe, 'GS.') }}</div>
-      <div class="text-end">{{ format_amount_display(cuenta.total_haber, 'GS.') }}</div>
-      <div class="text-end">{{ format_amount_display(cuenta.saldo_final, 'GS.') }}</div>
-    </div>
-  </section>
-  {% endfor %}
+  <table class="mayor-print-table mayor-print-master-table">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Asiento</th>
+        <th>{{ 'Comprobante' if pdf_orientation != 'portrait' else 'Comp.' }}</th>
+        <th>{{ 'Detalle / concepto del asiento' if pdf_orientation != 'portrait' else 'Detalle' }}</th>
+        <th class="text-end">DEBITOS</th>
+        <th class="text-end">CREDITOS</th>
+        <th class="text-end">S A L D O</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cuenta in libro %}
+      <tr class="mayor-print-account-row">
+        <td colspan="7">{{ cuenta.codigo }} {{ cuenta.denominacion|upper }}</td>
+      </tr>
+      {% for mov in cuenta.movimientos %}
+      <tr>
+        <td>{{ mov.fecha.strftime('%d/%m/%y') if mov.fecha else '' }}</td>
+        <td>{{ mov.numero_asiento or '' }}</td>
+        <td>{{ mov.referencia or mov.tipo_asiento or '' }}</td>
+        <td>{{ mov.descripcion or '' }}</td>
+        <td class="text-end">{{ format_amount_display(mov.debe, 'GS.') if mov.debe else '' }}</td>
+        <td class="text-end">{{ format_amount_display(mov.haber, 'GS.') if mov.haber else '' }}</td>
+        <td class="text-end">{{ format_amount_display(mov.saldo, 'GS.') }}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
   {% else %}
   <div class="text-muted">No hay movimientos para el criterio seleccionado.</div>
   {% endif %}
