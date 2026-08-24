@@ -32,29 +32,29 @@ body.bg-light {
   background: #fff;
   color: #111827;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 8px;
-  line-height: 1.1;
+  font-size: {{ '9.6px' if pdf_orientation == 'portrait' else '10.4px' }};
+  line-height: 1.16;
 }
 
 .mayor-print-header{
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 6px;
-  padding-bottom: 3px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
   border-bottom: 1px solid #4b5563;
 }
 
 .mayor-print-header h1{
   margin: 0 0 2px 0;
-  font-size: 14px;
+  font-size: {{ '16px' if pdf_orientation == 'portrait' else '18px' }};
   letter-spacing: .02em;
   font-weight: 700;
 }
 
 .mayor-print-periodo,
 .mayor-print-cliente{
-  font-size: 7px;
+  font-size: {{ '8px' if pdf_orientation == 'portrait' else '8.6px' }};
   font-weight: 600;
 }
 
@@ -66,7 +66,7 @@ body.bg-light {
 
 .mayor-print-table th,
 .mayor-print-table td{
-  padding: 1px 2px;
+  padding: 2px 3px;
   vertical-align: top;
   border: 0;
 }
@@ -74,28 +74,28 @@ body.bg-light {
 .mayor-print-table thead th{
   border-bottom: 1px solid #111827;
   text-align: left;
-  font-size: 6.7px;
+  font-size: {{ '7.6px' if pdf_orientation == 'portrait' else '8.2px' }};
   font-weight: 700;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.mayor-print-table thead th:nth-child(1){ width: 42px; }
-.mayor-print-table thead th:nth-child(2){ width: 24px; }
-.mayor-print-table thead th:nth-child(3){ width: {{ '64px' if pdf_orientation == 'portrait' else '98px' }}; }
+.mayor-print-table thead th:nth-child(1){ width: {{ '50px' if pdf_orientation == 'portrait' else '60px' }}; }
+.mayor-print-table thead th:nth-child(2){ width: {{ '30px' if pdf_orientation == 'portrait' else '40px' }}; }
+.mayor-print-table thead th:nth-child(3){ width: {{ '76px' if pdf_orientation == 'portrait' else '126px' }}; }
 .mayor-print-table thead th:nth-child(5),
 .mayor-print-table thead th:nth-child(6),
-.mayor-print-table thead th:nth-child(7){ width: {{ '52px' if pdf_orientation == 'portrait' else '70px' }}; }
+.mayor-print-table thead th:nth-child(7){ width: {{ '64px' if pdf_orientation == 'portrait' else '86px' }}; }
 
 .mayor-print-master-table{
-  font-size: {{ '6.8px' if pdf_orientation == 'portrait' else '7.6px' }};
+  font-size: {{ '7.9px' if pdf_orientation == 'portrait' else '9px' }};
 }
 
 .mayor-print-account-row td{
-  padding-top: 4px;
-  padding-bottom: 2px;
+  padding-top: 6px;
+  padding-bottom: 3px;
   border-top: 1px solid #111827;
-  font-size: {{ '7.4px' if pdf_orientation == 'portrait' else '8.4px' }};
+  font-size: {{ '8.8px' if pdf_orientation == 'portrait' else '10px' }};
   font-weight: 700;
   text-transform: uppercase;
 }

@@ -1,6 +1,203 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% if print_mode %}
+<style>
+@page {
+  size: A4 portrait;
+  margin: 6mm 8mm;
+}
+
+nav.navbar,
+#loginModal,
+.container > .alert,
+.libro-mayor-page,
+script[src*="bootstrap"],
+script[src*="sweetalert2"] {
+  display: none !important;
+}
+
+body.bg-light {
+  background: #fff !important;
+}
+
+.container.py-4 {
+  max-width: none !important;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.diario-print-sheet{
+  background: #fff;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 6.5px;
+  line-height: 1.05;
+}
+
+.diario-print-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #4b5563;
+}
+
+.diario-print-header h1{
+  margin: 0 0 2px 0;
+  font-size: 11px;
+  letter-spacing: .02em;
+  font-weight: 700;
+}
+
+.diario-print-meta{
+  font-size: 6px;
+  font-weight: 600;
+}
+
+.diario-print-asiento{
+  margin-bottom: 4px;
+  page-break-inside: avoid;
+}
+
+.diario-print-asiento-head{
+  display: grid;
+  grid-template-columns: 46px 44px 1fr 66px 66px;
+  gap: 3px;
+  align-items: end;
+  padding: 2px 0 1px;
+  border-top: 1px solid #111827;
+}
+
+.diario-print-asiento-title{
+  grid-column: 1 / span 3;
+  font-size: 6.8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.diario-print-asiento-date,
+.diario-print-asiento-ref{
+  font-size: 5.8px;
+  color: #374151;
+}
+
+.diario-print-asiento-totals{
+  display: contents;
+}
+
+.diario-print-asiento-totals span{
+  font-size: 5.7px;
+  color: #374151;
+}
+
+.diario-print-asiento-totals strong{
+  display: block;
+  text-align: right;
+  font-size: 6.1px;
+}
+
+.diario-print-table{
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.diario-print-table th,
+.diario-print-table td{
+  padding: .5px 1.5px;
+  vertical-align: top;
+}
+
+.diario-print-table thead th{
+  border-bottom: 1px solid #111827;
+  font-size: 5.8px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.diario-print-table thead th:nth-child(1){ width: 44px; }
+.diario-print-table thead th:nth-child(3){ width: 150px; }
+.diario-print-table thead th:nth-child(4),
+.diario-print-table thead th:nth-child(5){ width: 64px; }
+
+.diario-print-table tbody td:nth-child(4),
+.diario-print-table tbody td:nth-child(5){
+  text-align: right;
+  white-space: nowrap;
+}
+
+.diario-print-badge{
+  font-size: 5px;
+  font-weight: 700;
+  border: 1px solid #9ca3af;
+  border-radius: 999px;
+  padding: 0 3px;
+  margin-left: 3px;
+}
+</style>
+<div class="diario-print-sheet">
+  <div class="diario-print-header">
+    <div>
+      <h1>LIBRO DIARIO</h1>
+      <div class="diario-print-meta">{{ fecha_desde or 'Inicio' }} / {{ fecha_hasta or 'Hoy' }}</div>
+    </div>
+    <div class="diario-print-meta">{{ cliente_nombre }}</div>
+  </div>
+
+  {% if asientos %}
+    {% for asiento in asientos %}
+    <section class="diario-print-asiento">
+      <div class="diario-print-asiento-head">
+        <div class="diario-print-asiento-title">
+          Asiento {{ asiento.numero_asiento or asiento.id_asiento }} · {{ asiento.descripcion or 'Sin concepto' }}
+        </div>
+        <div class="diario-print-asiento-date">{{ asiento.fecha.strftime('%d/%m/%Y') if asiento.fecha else '' }}</div>
+        <div class="diario-print-asiento-ref">{{ asiento.referencia or asiento.tipo_asiento or '' }}</div>
+        <div class="diario-print-asiento-totals">
+          <span>Débitos</span>
+          <strong>{{ format_amount_display(asiento.total_debe, 'GS.') }}</strong>
+        </div>
+        <div class="diario-print-asiento-totals">
+          <span>Créditos</span>
+          <strong>{{ format_amount_display(asiento.total_haber, 'GS.') }}</strong>
+        </div>
+      </div>
+      <table class="diario-print-table">
+        <thead>
+          <tr>
+            <th>Cuenta</th>
+            <th>Denominación</th>
+            <th>Detalle</th>
+            <th class="text-end">Débitos</th>
+            <th class="text-end">Créditos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linea in asiento.lineas %}
+          <tr>
+            <td>{{ linea.codigo or '' }}</td>
+            <td>
+              {{ linea.denominacion or '' }}
+              {% if linea.es_libro_iva %}<span class="diario-print-badge">IVA</span>{% endif %}
+            </td>
+            <td>{{ linea.glosa or '' }}</td>
+            <td class="text-end">{{ format_amount_display(linea.debe, 'GS.') if linea.debe else '' }}</td>
+            <td class="text-end">{{ format_amount_display(linea.haber, 'GS.') if linea.haber else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endfor %}
+  {% else %}
+  <div class="text-muted">No hay asientos para el criterio seleccionado.</div>
+  {% endif %}
+</div>
+{% else %}
 <div class="libro-mayor-page{% if print_mode %} libro-mayor-print-mode{% endif %}">
   <div class="libro-mayor-hero card shadow-sm mb-3">
     <div class="card-body">
@@ -183,6 +380,7 @@
   {% endif %}
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

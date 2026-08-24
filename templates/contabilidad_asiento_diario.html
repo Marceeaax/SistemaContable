@@ -424,6 +424,27 @@ document.addEventListener("DOMContentLoaded", function () {
     if (cuenta) cuenta.focus();
   };
 
+  const construirLineaDesdeEditor = () => {
+    if (!cuentaId.value && !sincronizarCuentaPorCodigo()) {
+      return null;
+    }
+
+    const monto = normalizarNumero(importe.value || importeOrigen.value);
+    if (monto <= 0) {
+      return null;
+    }
+
+    const esDebe = operacion.value === "debe";
+    return {
+      idCuenta: cuentaId.value,
+      codigo: cuenta.value.trim(),
+      denominacion: denominacion.value || "",
+      glosa: glosa.value || "",
+      debe: esDebe ? monto : 0,
+      haber: esDebe ? 0 : monto
+    };
+  };
+
   const cargarLineaEnEditor = (index) => {
     const linea = lineas[index];
     if (!linea) return;
@@ -454,13 +475,21 @@ document.addEventListener("DOMContentLoaded", function () {
       const tr = document.createElement("tr");
       tr.className = index === lineas.length - 1 ? "diario-row-active" : "";
       tr.dataset.index = index;
+      const esEditable = Boolean(form);
+      const debeInput = esEditable
+        ? `<input type="text" class="diario-grid-inline-input text-end" data-index="${index}" data-field="debe" value="${linea.debe ? formatAmount(linea.debe, "GS.") : ""}">`
+        : `${linea.debe ? formatAmount(linea.debe, "GS.") : ""}`;
+      const haberInput = esEditable
+        ? `<input type="text" class="diario-grid-inline-input text-end" data-index="${index}" data-field="haber" value="${linea.haber ? formatAmount(linea.haber, "GS.") : ""}">`
+        : `${linea.haber ? formatAmount(linea.haber, "GS.") : ""}`;
+
       tr.innerHTML = `
         <td>${linea.codigo}</td>
         <td>${linea.denominacion}</td>
         <td>GS.</td>
         <td></td>
-        <td class="text-end">${linea.debe ? formatAmount(linea.debe, "GS.") : ""}</td>
-        <td class="text-end">${linea.haber ? formatAmount(linea.haber, "GS.") : ""}</td>
+        <td class="text-end">${debeInput}</td>
+        <td class="text-end">${haberInput}</td>
       `;
       tbody.appendChild(tr);
       tr.addEventListener("click", function () {
@@ -468,6 +497,38 @@ document.addEventListener("DOMContentLoaded", function () {
         tbody.querySelectorAll("tr").forEach((fila) => fila.classList.remove("diario-row-active"));
         tr.classList.add("diario-row-active");
         cargarLineaEnEditor(index);
+      });
+
+      tr.querySelectorAll(".diario-grid-inline-input").forEach((input) => {
+        input.addEventListener("click", (event) => {
+          event.stopPropagation();
+          tbody.querySelectorAll("tr").forEach((fila) => fila.classList.remove("diario-row-active"));
+          tr.classList.add("diario-row-active");
+          cargarLineaEnEditor(index);
+        });
+
+        input.addEventListener("input", function () {
+          this.value = this.value.replace(/[^\d.,]/g, "");
+        });
+
+        input.addEventListener("change", function () {
+          const field = this.dataset.field;
+          const monto = normalizarNumero(this.value);
+
+          if (field === "debe") {
+            lineas[index].debe = monto;
+            lineas[index].haber = 0;
+          } else {
+            lineas[index].haber = monto;
+            lineas[index].debe = 0;
+          }
+
+          renderLineas();
+          tbody.querySelectorAll("tr").forEach((fila) => fila.classList.remove("diario-row-active"));
+          const filaActualizada = tbody.querySelector(`tr[data-index="${index}"]`);
+          if (filaActualizada) filaActualizada.classList.add("diario-row-active");
+          cargarLineaEnEditor(index);
+        });
       });
 
       [["linea_id_cuenta[]", linea.idCuenta], ["linea_glosa[]", linea.glosa], ["linea_debe[]", linea.debe || ""], ["linea_haber[]", linea.haber || ""]].forEach(([name, value]) => {
@@ -556,26 +617,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (btnAgregarLinea) {
     btnAgregarLinea.addEventListener("click", function () {
-      if (!cuentaId.value && !sincronizarCuentaPorCodigo()) {
+      const lineaEditada = construirLineaDesdeEditor();
+      if (!lineaEditada) {
         Swal.fire("Cuenta requerida", "Seleccione una cuenta para agregar la línea.", "warning");
         return;
       }
-
-      const monto = normalizarNumero(importe.value || importeOrigen.value);
-      if (monto <= 0) {
-        Swal.fire("Importe requerido", "Ingrese un importe mayor a cero.", "warning");
-        return;
-      }
-
-      const esDebe = operacion.value === "debe";
-      const lineaEditada = {
-        idCuenta: cuentaId.value,
-        codigo: cuenta.value.trim(),
-        denominacion: denominacion.value || "",
-        glosa: glosa.value || "",
-        debe: esDebe ? monto : 0,
-        haber: esDebe ? 0 : monto
-      };
 
       if (indiceLineaActiva !== null && indiceLineaActiva >= 0 && indiceLineaActiva < lineas.length) {
         lineas[indiceLineaActiva] = lineaEditada;
@@ -602,6 +648,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (form) {
     form.addEventListener("submit", function (event) {
+      const lineaPendiente = construirLineaDesdeEditor();
+      if (lineaPendiente) {
+        if (indiceLineaActiva !== null && indiceLineaActiva >= 0 && indiceLineaActiva < lineas.length) {
+          lineas[indiceLineaActiva] = lineaPendiente;
+        } else if ((cuenta?.value || "").trim() || (importe?.value || importeOrigen?.value || "").trim() || (glosa?.value || "").trim()) {
+          lineas.push(lineaPendiente);
+        }
+      }
+
       renderLineas();
       if ({{ 'true' if nuevo else 'false' }} && asientoNumeroControl && asientosPorNumero[asientoNumeroControl.value]) {
         event.preventDefault();
@@ -714,6 +769,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (form) {
     renderLineas();
+    if (lineas.length) {
+      indiceLineaActiva = 0;
+      const primeraFila = tbody?.querySelector("tr[data-index='0']");
+      if (primeraFila) primeraFila.classList.add("diario-row-active");
+      cargarLineaEnEditor(0);
+    }
   }
 
   {% if mostrar_alerta_apertura %}

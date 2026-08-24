@@ -28,6 +28,12 @@
             data-bs-target="#modalBusquedaPersonas">
       Buscar por nombre y apellido
     </button>
+    <button class="btn btn-outline-danger"
+            type="button"
+            data-bs-toggle="modal"
+            data-bs-target="#modalGestionPersonas">
+      Modificar o eliminar personas y empresas
+    </button>
   </div>
 </div>
 
@@ -130,6 +136,88 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalGestionPersonas" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Modificar o eliminar personas y empresas</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label for="gestionNumero" class="form-label">RUC / CI</label>
+            <input type="text" class="form-control" id="gestionNumero" autocomplete="off" placeholder="Número exacto">
+          </div>
+          <div class="col-md-3">
+            <label for="gestionNombreBuscar" class="form-label">Nombre</label>
+            <input type="text" class="form-control" id="gestionNombreBuscar" autocomplete="off" placeholder="Buscar por nombre">
+          </div>
+          <div class="col-md-3">
+            <label for="gestionApellidoBuscar" class="form-label">Apellido</label>
+            <input type="text" class="form-control" id="gestionApellidoBuscar" autocomplete="off" placeholder="Buscar por apellido">
+          </div>
+          <div class="col-md-3 d-flex align-items-end gap-2">
+            <button type="button" class="btn btn-outline-primary w-100" id="btnGestionBuscarNumero">Buscar por número</button>
+            <button type="button" class="btn btn-outline-primary w-100" id="btnGestionBuscarNombre">Buscar</button>
+          </div>
+        </div>
+
+        <div class="border rounded mb-3" style="max-height: 250px; overflow: auto;">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th style="width: 80px;">Tipo</th>
+                <th style="width: 140px;">Número</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th style="width: 150px;">Fecha nac.</th>
+              </tr>
+            </thead>
+            <tbody id="tablaGestionPersonas">
+              <tr>
+                <td colspan="5" class="text-muted text-center py-3">Sin resultados cargados.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="row g-2">
+          <div class="col-md-2">
+            <label class="form-label">Tipo</label>
+            <input type="text" class="form-control" id="gestionTipoIdent" readonly tabindex="-1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Número</label>
+            <input type="text" class="form-control" id="gestionNumeroEdit" readonly tabindex="-1">
+          </div>
+          <div class="col-md-7">
+            <label class="form-label">Nombre</label>
+            <input type="text" class="form-control" id="gestionNombreEdit" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Apellido</label>
+            <input type="text" class="form-control" id="gestionApellidoEdit" autocomplete="off">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Fecha de nacimiento</label>
+            <input type="date" class="form-control" id="gestionFechaNacEdit">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">País</label>
+            <input type="text" class="form-control" id="gestionPaisSwift" readonly tabindex="-1">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-danger me-auto" id="btnGestionEliminar" disabled>Eliminar</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="btnGestionGuardar" disabled>Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -137,6 +225,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   const modalConsulta = document.getElementById("modalConsultaPersonas");
   const modalBusqueda = document.getElementById("modalBusquedaPersonas");
+  const modalGestion = document.getElementById("modalGestionPersonas");
   const numeroCedula = document.getElementById("numeroCedula");
   const personaNombre = document.getElementById("personaNombre");
   const personaApellido = document.getElementById("personaApellido");
@@ -146,6 +235,21 @@ document.addEventListener("DOMContentLoaded", function () {
   const personaBusquedaNombre = document.getElementById("personaBusquedaNombre");
   const personaBusquedaApellido = document.getElementById("personaBusquedaApellido");
   const tablaResultadosPersonas = document.getElementById("tablaResultadosPersonas");
+  const gestionNumero = document.getElementById("gestionNumero");
+  const gestionNombreBuscar = document.getElementById("gestionNombreBuscar");
+  const gestionApellidoBuscar = document.getElementById("gestionApellidoBuscar");
+  const tablaGestionPersonas = document.getElementById("tablaGestionPersonas");
+  const gestionTipoIdent = document.getElementById("gestionTipoIdent");
+  const gestionNumeroEdit = document.getElementById("gestionNumeroEdit");
+  const gestionNombreEdit = document.getElementById("gestionNombreEdit");
+  const gestionApellidoEdit = document.getElementById("gestionApellidoEdit");
+  const gestionFechaNacEdit = document.getElementById("gestionFechaNacEdit");
+  const gestionPaisSwift = document.getElementById("gestionPaisSwift");
+  const btnGestionBuscarNumero = document.getElementById("btnGestionBuscarNumero");
+  const btnGestionBuscarNombre = document.getElementById("btnGestionBuscarNombre");
+  const btnGestionGuardar = document.getElementById("btnGestionGuardar");
+  const btnGestionEliminar = document.getElementById("btnGestionEliminar");
+  let gestionSeleccionActual = null;
 
   const limpiarResultado = () => {
     personaNombre.value = "";
@@ -184,6 +288,68 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       tablaResultadosPersonas.appendChild(tr);
+    });
+  };
+
+  const limpiarGestionSeleccion = () => {
+    gestionSeleccionActual = null;
+    gestionTipoIdent.value = "";
+    gestionNumeroEdit.value = "";
+    gestionNombreEdit.value = "";
+    gestionApellidoEdit.value = "";
+    gestionFechaNacEdit.value = "";
+    gestionPaisSwift.value = "";
+    gestionApellidoEdit.disabled = true;
+    gestionFechaNacEdit.disabled = true;
+    btnGestionGuardar.disabled = true;
+    btnGestionEliminar.disabled = true;
+  };
+
+  const aplicarGestionPersona = (persona) => {
+    gestionSeleccionActual = persona;
+    gestionTipoIdent.value = persona.tipo_ident || "";
+    gestionNumeroEdit.value = persona.numero || "";
+    gestionNombreEdit.value = persona.nombre || "";
+    gestionApellidoEdit.value = persona.apellido || "";
+    gestionFechaNacEdit.value = persona.fecha_nac || "";
+    gestionPaisSwift.value = persona.pais_swift || "PY";
+    const esCI = (persona.tipo_ident || "") === "CI";
+    gestionApellidoEdit.disabled = !esCI;
+    gestionFechaNacEdit.disabled = !esCI;
+    if (!esCI) {
+      gestionApellidoEdit.value = "";
+      gestionFechaNacEdit.value = "";
+    }
+    btnGestionGuardar.disabled = false;
+    btnGestionEliminar.disabled = false;
+  };
+
+  const renderGestionResultados = (personas) => {
+    if (!tablaGestionPersonas) return;
+    if (!personas || !personas.length) {
+      tablaGestionPersonas.innerHTML = `
+        <tr>
+          <td colspan="5" class="text-muted text-center py-3">No se encontraron coincidencias.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    tablaGestionPersonas.innerHTML = "";
+    personas.forEach((persona) => {
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.innerHTML = `
+        <td>${persona.tipo_ident || ""}</td>
+        <td>${persona.numero || ""}</td>
+        <td>${persona.nombre || ""}</td>
+        <td>${persona.apellido || ""}</td>
+        <td>${persona.fecha_nac || ""}</td>
+      `;
+      tr.addEventListener("click", function () {
+        aplicarGestionPersona(persona);
+      });
+      tablaGestionPersonas.appendChild(tr);
     });
   };
 
@@ -253,6 +419,174 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   };
 
+  const buscarGestionPorNumero = () => {
+    const numero = (gestionNumero.value || "").trim();
+    if (!numero) {
+      Swal.fire("Dato requerido", "Ingrese un RUC o CI.", "warning");
+      gestionNumero.focus();
+      return;
+    }
+
+    btnGestionBuscarNumero.disabled = true;
+    fetch(`{{ url_for('buscar_persona_ref_detalle') }}?q=${encodeURIComponent(numero)}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "No se pudo consultar el registro.");
+        }
+        return data;
+      })
+      .then((data) => {
+        const persona = data.persona || null;
+        renderGestionResultados(persona ? [persona] : []);
+        if (persona) {
+          aplicarGestionPersona(persona);
+        } else {
+          limpiarGestionSeleccion();
+        }
+      })
+      .catch((error) => {
+        renderGestionResultados([]);
+        limpiarGestionSeleccion();
+        Swal.fire("Error", error.message, "error");
+      })
+      .finally(() => {
+        btnGestionBuscarNumero.disabled = false;
+      });
+  };
+
+  const buscarGestionPorNombre = () => {
+    const nombre = (gestionNombreBuscar.value || "").trim();
+    const apellido = (gestionApellidoBuscar.value || "").trim();
+    if (!nombre && !apellido) {
+      Swal.fire("Dato requerido", "Ingrese nombre, apellido o ambos.", "warning");
+      gestionNombreBuscar.focus();
+      return;
+    }
+
+    btnGestionBuscarNombre.disabled = true;
+    fetch(`{{ url_for('buscar_personas_ref_por_nombre_apellido') }}?nombre=${encodeURIComponent(nombre)}&apellido=${encodeURIComponent(apellido)}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "No se pudo realizar la búsqueda.");
+        }
+        return data;
+      })
+      .then((data) => {
+        const personas = data.personas || [];
+        renderGestionResultados(personas);
+        limpiarGestionSeleccion();
+      })
+      .catch((error) => {
+        renderGestionResultados([]);
+        limpiarGestionSeleccion();
+        Swal.fire("Error", error.message, "error");
+      })
+      .finally(() => {
+        btnGestionBuscarNombre.disabled = false;
+      });
+  };
+
+  const guardarGestionPersona = () => {
+    if (!gestionSeleccionActual) {
+      Swal.fire("Seleccione un registro", "Primero elija una persona o empresa.", "warning");
+      return;
+    }
+
+    const nombre = (gestionNombreEdit.value || "").trim();
+    const apellido = (gestionApellidoEdit.value || "").trim();
+    const fecha_nac = gestionFechaNacEdit.value || "";
+
+    if (!nombre) {
+      Swal.fire("Dato requerido", "El nombre es obligatorio.", "warning");
+      gestionNombreEdit.focus();
+      return;
+    }
+
+    btnGestionGuardar.disabled = true;
+    fetch(`{{ url_for('actualizar_persona_ref') }}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: new URLSearchParams({
+        tipo_ident: gestionTipoIdent.value,
+        numero: gestionNumeroEdit.value,
+        pais_swift: gestionPaisSwift.value || "PY",
+        nombre,
+        apellido,
+        fecha_nac
+      })
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "No se pudo actualizar el registro.");
+        }
+        return data;
+      })
+      .then((data) => {
+        aplicarGestionPersona(data.persona);
+        Swal.fire("Actualizado", "Los datos fueron actualizados correctamente.", "success");
+      })
+      .catch((error) => {
+        Swal.fire("Error", error.message, "error");
+      })
+      .finally(() => {
+        btnGestionGuardar.disabled = false;
+      });
+  };
+
+  const eliminarGestionPersona = () => {
+    if (!gestionSeleccionActual) {
+      Swal.fire("Seleccione un registro", "Primero elija una persona o empresa.", "warning");
+      return;
+    }
+
+    Swal.fire({
+      icon: "warning",
+      title: "Eliminar registro",
+      text: "Esta acción eliminará la persona o empresa de personas_ref. ¿Desea continuar?",
+      showCancelButton: true,
+      confirmButtonText: "Eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#d33"
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+
+      btnGestionEliminar.disabled = true;
+      fetch(`{{ url_for('eliminar_persona_ref') }}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+        body: new URLSearchParams({
+          tipo_ident: gestionTipoIdent.value,
+          numero: gestionNumeroEdit.value,
+          pais_swift: gestionPaisSwift.value || "PY"
+        })
+      })
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "No se pudo eliminar el registro.");
+          }
+          return data;
+        })
+        .then(() => {
+          renderGestionResultados([]);
+          limpiarGestionSeleccion();
+          gestionNumero.value = "";
+          gestionNombreBuscar.value = "";
+          gestionApellidoBuscar.value = "";
+          Swal.fire("Eliminado", "El registro fue eliminado correctamente.", "success");
+        })
+        .catch((error) => {
+          Swal.fire("Error", error.message, "error");
+        })
+        .finally(() => {
+          btnGestionEliminar.disabled = false;
+        });
+    });
+  };
+
   if (modalConsulta) {
     modalConsulta.addEventListener("shown.bs.modal", function () {
       numeroCedula.focus();
@@ -278,6 +612,22 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  if (modalGestion) {
+    modalGestion.addEventListener("shown.bs.modal", function () {
+      gestionNumero.focus();
+      renderGestionResultados([]);
+      limpiarGestionSeleccion();
+    });
+
+    modalGestion.addEventListener("hidden.bs.modal", function () {
+      gestionNumero.value = "";
+      gestionNombreBuscar.value = "";
+      gestionApellidoBuscar.value = "";
+      renderGestionResultados([]);
+      limpiarGestionSeleccion();
+    });
+  }
+
   if (numeroCedula) {
     numeroCedula.addEventListener("input", function () {
       this.value = this.value.replace(/\D/g, "");
@@ -290,6 +640,26 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  [gestionNumero].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        buscarGestionPorNumero();
+      }
+    });
+  });
+
+  [gestionNombreBuscar, gestionApellidoBuscar].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        buscarGestionPorNombre();
+      }
+    });
+  });
 
   if (btnBuscarPersona) {
     btnBuscarPersona.addEventListener("click", consultarPersona);
@@ -307,6 +677,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (btnBuscarPersonaNombre) {
     btnBuscarPersonaNombre.addEventListener("click", buscarPorNombreApellido);
+  }
+
+  if (btnGestionBuscarNumero) {
+    btnGestionBuscarNumero.addEventListener("click", buscarGestionPorNumero);
+  }
+
+  if (btnGestionBuscarNombre) {
+    btnGestionBuscarNombre.addEventListener("click", buscarGestionPorNombre);
+  }
+
+  if (btnGestionGuardar) {
+    btnGestionGuardar.addEventListener("click", guardarGestionPersona);
+  }
+
+  if (btnGestionEliminar) {
+    btnGestionEliminar.addEventListener("click", eliminarGestionPersona);
   }
 });
 </script>

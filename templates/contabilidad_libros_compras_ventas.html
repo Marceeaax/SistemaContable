@@ -5,63 +5,159 @@
 <style>
 @page {
   size: A4 {{ 'landscape' if pdf_orientation == 'landscape' else 'portrait' }};
-  margin: 12mm;
+  margin: 9mm 10mm;
+}
+
+nav.navbar,
+#loginModal,
+.container > .alert,
+.libro-mayor-page,
+script[src*="bootstrap"],
+script[src*="sweetalert2"] {
+  display: none !important;
+}
+
+body.bg-light {
+  background: #fff !important;
+}
+
+.container.py-4 {
+  max-width: none !important;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.cv-print-sheet{
+  background: #fff;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: {{ '6.6px' if pdf_orientation == 'portrait' else '7.4px' }};
+  line-height: 1.12;
+}
+
+.cv-print-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 7px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #4b5563;
+}
+
+.cv-print-header h1{
+  margin: 0 0 2px 0;
+  font-size: {{ '13px' if pdf_orientation == 'portrait' else '15px' }};
+  letter-spacing: .02em;
+  font-weight: 700;
+}
+
+.cv-print-meta{
+  font-size: {{ '6.4px' if pdf_orientation == 'portrait' else '7px' }};
+  font-weight: 600;
+}
+
+.cv-print-table{
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cv-print-table th,
+.cv-print-table td{
+  padding: 1px 2px;
+  vertical-align: top;
+}
+
+.cv-print-table thead th{
+  border-bottom: 1px solid #111827;
+  text-align: left;
+  text-transform: uppercase;
+  font-size: {{ '6px' if pdf_orientation == 'portrait' else '6.6px' }};
+  white-space: nowrap;
+}
+
+.cv-print-table thead th:nth-child(1){ width: {{ '82px' if pdf_orientation == 'portrait' else '112px' }}; }
+.cv-print-table thead th:nth-child(2){ width: {{ '42px' if pdf_orientation == 'portrait' else '56px' }}; }
+.cv-print-table thead th:nth-child(4){ width: {{ '68px' if pdf_orientation == 'portrait' else '88px' }}; }
+.cv-print-table thead th:nth-child(5),
+.cv-print-table thead th:nth-child(6),
+.cv-print-table thead th:nth-child(7),
+.cv-print-table thead th:nth-child(8),
+.cv-print-table thead th:nth-child(9),
+.cv-print-table thead th:nth-child(10){ width: {{ '54px' if pdf_orientation == 'portrait' else '72px' }}; }
+
+.cv-print-table tbody td:nth-child(n+5),
+.cv-print-table tfoot th:nth-child(n+5){
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cv-print-table tbody tr:first-child td{
+  padding-top: 3px;
+}
+
+.cv-print-table tfoot th{
+  border-top: 1px solid #111827;
+  padding-top: 3px;
+  font-weight: 700;
 }
 </style>
-<div class="mayor-print-sheet">
-  <div class="mayor-print-header">
+<div class="cv-print-sheet">
+  <div class="cv-print-header">
     <div>
       <h1>LIBRO DE {{ 'COMPRAS' if tipo_libro == 'COMPRA' else 'VENTAS' }}</h1>
-      <div class="mayor-print-periodo">
-        {{ fecha_desde or 'Inicio' }} AL {{ fecha_hasta or 'Hoy' }}
-      </div>
+      <div class="cv-print-meta">{{ fecha_desde or 'Inicio' }} AL {{ fecha_hasta or 'Hoy' }}</div>
     </div>
     <div class="text-end">
-      <div class="mayor-print-cliente">{{ cliente_nombre }}</div>
-      <div class="mayor-print-periodo">R.U.C. {{ cliente_ruc or '—' }}</div>
+      <div class="cv-print-meta">{{ cliente_nombre }}</div>
+      <div class="cv-print-meta">R.U.C. {{ cliente_ruc or '-' }}</div>
     </div>
   </div>
 
-  <div class="libro-cv-print-columns">
-    <div>Comprobante</div>
-    <div>Fecha</div>
-    <div>Nombre o razón social</div>
-    <div>RUC / CI</div>
-    <div class="text-end">Exentas</div>
-    <div class="text-end">Gravadas 5%</div>
-    <div class="text-end">Gravadas 10%</div>
-    <div class="text-end">I.V.A. 5%</div>
-    <div class="text-end">I.V.A. 10%</div>
-    <div class="text-end">TOTAL</div>
-  </div>
-
-  {% for row in filas %}
-  <div class="libro-cv-print-row">
-    <div>{{ (row.documento_codigo or '') ~ '-' ~ (row.numero_comprobante or '') }}</div>
-    <div>{{ row.fecha.strftime('%d/%m/%y') if row.fecha else '' }}</div>
-    <div>{{ row.razon_social or '' }}</div>
-    <div>{{ row.ruc or '' }}</div>
-    <div class="text-end">{{ format_amount_display(row.exento, 'GS.') if row.exento else '' }}</div>
-    <div class="text-end">{{ format_amount_display(row.gravado_5, 'GS.') if row.gravado_5 else '' }}</div>
-    <div class="text-end">{{ format_amount_display(row.gravado_10, 'GS.') if row.gravado_10 else '' }}</div>
-    <div class="text-end">{{ format_amount_display(row.iva_5, 'GS.') if row.iva_5 else '' }}</div>
-    <div class="text-end">{{ format_amount_display(row.iva_10, 'GS.') if row.iva_10 else '' }}</div>
-    <div class="text-end">{{ format_amount_display(row.total, 'GS.') if row.total else '' }}</div>
-  </div>
-  {% endfor %}
-
-  <div class="libro-cv-print-totales">
-    <div></div>
-    <div></div>
-    <div></div>
-    <div>Totales</div>
-    <div class="text-end">{{ format_amount_display(resumen.exento, 'GS.') }}</div>
-    <div class="text-end">{{ format_amount_display(resumen.gravado_5, 'GS.') }}</div>
-    <div class="text-end">{{ format_amount_display(resumen.gravado_10, 'GS.') }}</div>
-    <div class="text-end">{{ format_amount_display(resumen.iva_5, 'GS.') }}</div>
-    <div class="text-end">{{ format_amount_display(resumen.iva_10, 'GS.') }}</div>
-    <div class="text-end">{{ format_amount_display(resumen.total, 'GS.') }}</div>
-  </div>
+  <table class="cv-print-table">
+    <thead>
+      <tr>
+        <th>Comprobante</th>
+        <th>Fecha</th>
+        <th>Nombre o razón social</th>
+        <th>RUC / CI</th>
+        <th>Exentas</th>
+        <th>Gravadas 5%</th>
+        <th>Gravadas 10%</th>
+        <th>I.V.A. 5%</th>
+        <th>I.V.A. 10%</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in filas %}
+      <tr>
+        <td>{{ (row.documento_codigo or '') ~ '-' ~ (row.numero_comprobante or '') }}</td>
+        <td>{{ row.fecha.strftime('%d/%m/%y') if row.fecha else '' }}</td>
+        <td>{{ row.razon_social or '' }}</td>
+        <td>{{ row.ruc or '' }}</td>
+        <td>{{ format_amount_display(row.exento, 'GS.') if row.exento else '' }}</td>
+        <td>{{ format_amount_display(row.gravado_5, 'GS.') if row.gravado_5 else '' }}</td>
+        <td>{{ format_amount_display(row.gravado_10, 'GS.') if row.gravado_10 else '' }}</td>
+        <td>{{ format_amount_display(row.iva_5, 'GS.') if row.iva_5 else '' }}</td>
+        <td>{{ format_amount_display(row.iva_10, 'GS.') if row.iva_10 else '' }}</td>
+        <td>{{ format_amount_display(row.total, 'GS.') if row.total else '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="4">Totales</th>
+        <th>{{ format_amount_display(resumen.exento, 'GS.') }}</th>
+        <th>{{ format_amount_display(resumen.gravado_5, 'GS.') }}</th>
+        <th>{{ format_amount_display(resumen.gravado_10, 'GS.') }}</th>
+        <th>{{ format_amount_display(resumen.iva_5, 'GS.') }}</th>
+        <th>{{ format_amount_display(resumen.iva_10, 'GS.') }}</th>
+        <th>{{ format_amount_display(resumen.total, 'GS.') }}</th>
+      </tr>
+    </tfoot>
+  </table>
 </div>
 {% else %}
 <div class="libro-mayor-page">

@@ -432,6 +432,22 @@ thead.sticky-top th {
   color: #fff;
 }
 
+.diario-grid-inline-input{
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0 2px;
+  height: 20px;
+  font: inherit;
+  color: inherit;
+}
+
+.diario-grid-inline-input:focus{
+  outline: none;
+  border-color: #8bb8ff;
+  background: #ffffff;
+}
+
 .diario-totales{
   min-height: 42px;
   display: grid;

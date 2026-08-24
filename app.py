@@ -366,6 +366,9 @@ def fetch_clientes():
 def fetch_persona_ref_por_numero(numero_cedula):
     sql = """
         SELECT
+            rf_tipo_ident,
+            rf_numero,
+            rf_pais_swift,
             COALESCE(rf_nombre, '') AS rf_nombre,
             COALESCE(rf_apellido, '') AS rf_apellido,
             rf_fecha_nac
@@ -396,7 +399,9 @@ def fetch_personas_ref_por_nombre_apellido(nombre="", apellido=""):
 
     sql = f"""
         SELECT
+            rf_tipo_ident,
             rf_numero,
+            rf_pais_swift,
             COALESCE(rf_nombre, '') AS rf_nombre,
             COALESCE(rf_apellido, '') AS rf_apellido,
             rf_fecha_nac
@@ -830,6 +835,70 @@ def construir_lineas_comprobante_iva(tipo_libro, id_cuenta, id_cta_iva_5, id_cta
     return lineas
 
 
+def resumir_lineas_asiento_por_cuenta(lineas, glosa_resumen=None):
+    acumuladas = {}
+    orden = []
+
+    for id_cuenta, glosa, debe, haber in lineas:
+        debe = debe or Decimal("0")
+        haber = haber or Decimal("0")
+        lado = "D" if debe > 0 else "H"
+        clave = (id_cuenta, lado)
+
+        if clave not in acumuladas:
+            acumuladas[clave] = {
+                "id_cuenta": id_cuenta,
+                "glosa": glosa_resumen if glosa_resumen is not None else glosa,
+                "debe": Decimal("0"),
+                "haber": Decimal("0"),
+            }
+            orden.append(clave)
+
+        acumuladas[clave]["debe"] += debe
+        acumuladas[clave]["haber"] += haber
+
+    return [
+        (
+            acumuladas[clave]["id_cuenta"],
+            acumuladas[clave]["glosa"],
+            acumuladas[clave]["debe"],
+            acumuladas[clave]["haber"],
+        )
+        for clave in orden
+    ]
+
+
+def normalizar_asientos_iva_agrupados(id_cliente, id_asiento=None):
+    usuario = get_current_username()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            filtros = ["a.id_cliente = %s"]
+            params = [id_cliente]
+
+            if id_asiento is not None:
+                filtros.append("a.id_asiento = %s")
+                params.append(id_asiento)
+
+            cur.execute(f"""
+                SELECT a.id_asiento
+                FROM asiento a
+                JOIN libro_iva_comprobante lic
+                  ON lic.id_cliente = a.id_cliente
+                 AND lic.id_asiento = a.id_asiento
+                WHERE {' AND '.join(filtros)}
+                GROUP BY a.id_asiento
+                HAVING COUNT(lic.id_comprobante_iva) > 1
+            """, params)
+            candidatos = [row[0] for row in cur.fetchall()]
+
+            for candidato in candidatos:
+                reconstruir_asiento_desde_comprobantes_iva(cur, id_cliente, candidato, usuario)
+
+            if candidatos:
+                conn.commit()
+
+
 def reconstruir_asiento_desde_comprobantes_iva(cur, id_cliente, id_asiento, usuario):
     before_asiento = fetch_row_dict(cur, "asiento", "id_cliente = %s AND id_asiento = %s", (id_cliente, id_asiento))
     if not before_asiento:
@@ -925,6 +994,9 @@ def reconstruir_asiento_desde_comprobantes_iva(cur, id_cliente, id_asiento, usua
         raise ValueError("El asiento agrupado no queda balanceado.")
 
     descripcion_asiento = descripciones[0] if len(comprobantes) == 1 else ("Ventas varias" if tipo_libro == "VENTA" else "Compras varias")
+    if len(comprobantes) > 1:
+        lineas_generadas = resumir_lineas_asiento_por_cuenta(lineas_generadas, descripcion_asiento)
+
     datos_asiento = {
         "fecha": fecha_asiento,
         "descripcion": descripcion_asiento,
@@ -1864,6 +1936,9 @@ def consulta_personas_ref():
     return jsonify({
         "ok": True,
         "persona": {
+            "tipo_ident": persona["rf_tipo_ident"] or "",
+            "numero": persona["rf_numero"] or "",
+            "pais_swift": persona["rf_pais_swift"] or "PY",
             "nombre": persona["rf_nombre"] or "",
             "apellido": persona["rf_apellido"] or "",
             "fecha_nac": fecha_nac.strftime("%Y-%m-%d") if fecha_nac else ""
@@ -1882,7 +1957,9 @@ def buscar_personas_ref_por_nombre_apellido():
     personas = fetch_personas_ref_por_nombre_apellido(nombre, apellido)
     resultados = [
         {
+            "tipo_ident": persona["rf_tipo_ident"] or "",
             "numero": persona["rf_numero"] or "",
+            "pais_swift": persona["rf_pais_swift"] or "PY",
             "nombre": persona["rf_nombre"] or "",
             "apellido": persona["rf_apellido"] or "",
             "fecha_nac": persona["rf_fecha_nac"].strftime("%Y-%m-%d") if persona["rf_fecha_nac"] else ""
@@ -2005,6 +2082,8 @@ def actualizar_persona_ref():
     numero = request.form.get("numero", "").strip()
     pais_swift = request.form.get("pais_swift", "PY").strip().upper() or "PY"
     nombre = request.form.get("nombre", "").strip()
+    apellido = request.form.get("apellido", "").strip()
+    fecha_nac = request.form.get("fecha_nac", "").strip()
     usuario = get_current_username()
 
     if tipo_ident not in ("RUC", "CI"):
@@ -2015,6 +2094,10 @@ def actualizar_persona_ref():
 
     if not nombre:
         return jsonify({"ok": False, "error": "El nombre es obligatorio"}), 400
+
+    if tipo_ident != "CI":
+        apellido = ""
+        fecha_nac = ""
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -2027,9 +2110,17 @@ def actualizar_persona_ref():
             if not before:
                 return jsonify({"ok": False, "error": "Cliente no encontrado."}), 404
 
+            cambios = {"rf_nombre": nombre}
+            if tipo_ident == "CI":
+                cambios["rf_apellido"] = apellido or None
+                cambios["rf_fecha_nac"] = fecha_nac or None
+            else:
+                cambios["rf_apellido"] = None
+                cambios["rf_fecha_nac"] = None
+
             asignaciones, params = build_update_with_audit(
                 "personas_ref",
-                {"rf_nombre": nombre},
+                cambios,
                 usuario
             )
             cur.execute(
@@ -2068,6 +2159,45 @@ def actualizar_persona_ref():
             "fecha_nac": persona_actualizada["rf_fecha_nac"].strftime("%Y-%m-%d") if persona_actualizada["rf_fecha_nac"] else ""
         }
     })
+
+
+@app.route("/personas-ref/eliminar", methods=["POST"])
+def eliminar_persona_ref():
+    tipo_ident = request.form.get("tipo_ident", "").strip().upper()
+    numero = request.form.get("numero", "").strip()
+    pais_swift = request.form.get("pais_swift", "PY").strip().upper() or "PY"
+    usuario = get_current_username()
+
+    if tipo_ident not in ("RUC", "CI"):
+        return jsonify({"ok": False, "error": "Tipo de registro inválido"}), 400
+
+    if not numero:
+        return jsonify({"ok": False, "error": "El número es obligatorio"}), 400
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            before = fetch_row_dict(
+                cur,
+                "personas_ref",
+                "rf_tipo_ident = %s AND rf_numero = %s AND rf_pais_swift = %s",
+                (tipo_ident, numero, pais_swift)
+            )
+            if not before:
+                return jsonify({"ok": False, "error": "Registro no encontrado."}), 404
+
+            cur.execute(
+                """
+                DELETE FROM personas_ref
+                WHERE rf_tipo_ident = %s
+                  AND rf_numero = %s
+                  AND rf_pais_swift = %s
+                """,
+                (tipo_ident, numero, pais_swift)
+            )
+            registrar_auditoria(cur, "personas_ref", "DELETE", before=before, usuario=usuario)
+            conn.commit()
+
+    return jsonify({"ok": True})
 
 
 @app.route("/login", methods=["POST"])
@@ -2117,6 +2247,7 @@ def contabilidad_cliente(id_cliente):
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/libro-mayor")
 def libro_mayor(id_cliente):
+    normalizar_asientos_iva_agrupados(id_cliente)
     cliente_nombre = fetch_cliente_nombre(id_cliente)
     cuentas = fetch_cuentas_imputables(id_cliente)
 
@@ -2199,6 +2330,7 @@ def libro_mayor(id_cliente):
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/libro-diario")
 def libro_diario_reporte(id_cliente):
+    normalizar_asientos_iva_agrupados(id_cliente)
     cliente_nombre = fetch_cliente_nombre(id_cliente)
     fecha_desde_raw = request.args.get("fecha_desde", "").strip()
     fecha_hasta_raw = request.args.get("fecha_hasta", "").strip()
@@ -2356,6 +2488,7 @@ def libros_compras_ventas(id_cliente):
 
 @app.route("/cliente/<int:id_cliente>/contabilidad/asiento-diario")
 def asiento_diario(id_cliente):
+    normalizar_asientos_iva_agrupados(id_cliente)
     cliente_nombre = fetch_cliente_nombre(id_cliente)
     asientos = fetch_asientos_cliente(id_cliente)
     cuentas = fetch_cuentas_imputables(id_cliente)
